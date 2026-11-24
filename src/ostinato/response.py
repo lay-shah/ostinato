@@ -74,6 +74,7 @@ class _Arm:
     def reset(self):
         self._last = self._down_since = self._up_since = None
         self._was_down = False
+        self.high = False  # seen raised, and not seen lowered since
 
     @property
     def raised_since(self):
@@ -83,14 +84,12 @@ class _Arm:
         """Return how long the hand has been held up after being down."""
         if self._last is not None and t - self._last > MAX_GAP:
             self.reset()
-        if self._up_since is not None and (height is None or height < RAISED):
-            # An interrupted raise must be followed by a fresh observed lower.
-            self._was_down = False
         if height is None:
             self._up_since = self._down_since = None  # a hold must be seen throughout
             return 0.0
         self._last = t
         if height >= RAISED:
+            self.high = True
             self._down_since = None
             if not self._was_down:
                 return 0.0
@@ -99,6 +98,7 @@ class _Arm:
             return t - self._up_since
         self._up_since = None
         if height <= LOWERED:
+            self.high = False
             if self._down_since is None:
                 self._down_since = t
             if t - self._down_since >= DOWN_SECONDS:
@@ -176,6 +176,9 @@ class ResponseCheck:
         if not self.active:
             self.state, self._asked_at, self.outcome = "speaking", t, None
             self._seen = False
+            for arm in self._arms:
+                if arm.high:  # already up, even if hidden right now: needs a fresh lower
+                    arm.reset()
             self.speaker.start(t)
 
     def cancel(self):
