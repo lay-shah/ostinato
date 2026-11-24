@@ -41,6 +41,8 @@ Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and che
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
+On a Mac, you can instead double-click `Ostinato.command` or `Ostinato Demo.command` in the `launch` folder.
+
 ### Try it without a camera
 
 ```bash
@@ -68,6 +70,12 @@ mkdir -p data  # ignored by git
 python -m ostinato.viewpoints trial data/pair-01.json --views front-1m angled-2m
 python -m ostinato.viewpoints report data/pair-01.json --tolerance-bpm 2
 python -m ostinato.viewpoints replay data/pair-01.json
+```
+
+To turn finished trials into one page with error, bias, limits of agreement, and coverage:
+
+```bash
+ostinato-accuracy data/pair-*.json --html data/accuracy.html
 ```
 
 ## See the simulated medic view

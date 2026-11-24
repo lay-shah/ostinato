@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 ostinato = "ostinato.app:main"
 ostinato-sim = "ostinato.simulation:main"
+ostinato-accuracy = "ostinato.accuracy:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
