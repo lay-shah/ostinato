@@ -173,7 +173,7 @@ def test_trial_replay_matches_live_rules_through_brief_dropouts(monkeypatch):
     # A clear estimate from 25 s isolates how dropouts affect confirmation.
     monkeypatch.setattr(
         "ostinato.app.estimate",
-        lambda t, x: Reading(16.0, 0.9, "ok") if t[-1] >= 25 else Reading(None, 0.0, "need more data"),
+        lambda t, x, *_: Reading(16.0, 0.9, "ok") if t[-1] >= 25 else Reading(None, 0.0, "need more data"),
     )
     row = viewpoints.capture(0, "A")
     reasons = [r[3] for r in row.trace]
@@ -211,3 +211,24 @@ def test_chest_cut_off_by_a_close_webcam_is_still_measured():
     assert y1 == 360 and y1 - y0 > 90
     assert chest_box(pts + [0, 60], (360, 640)) is None  # too little chest left
     assert chest_box(pts + [260, 0], (360, 640)) is None
+
+
+@pytest.mark.parametrize("breathing_px", [0, 2])
+def test_moving_curtain_is_never_mistaken_for_breathing(breathing_px):
+    """A swaying background with a still chest once gave a confident rate."""
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    for i in range(28 * 15):
+        t = i / 15
+        sway = shift(BACK, 0, 3 * np.sin(2 * np.pi * 18 / 60 * t))
+        body = shift(BODY, 0, breathing_px * np.sin(2 * np.pi * 13 / 60 * t))
+        monitor.update(np.where(MASK[..., None] == 1, body, sway), t)
+    assert monitor.reading.bpm is None
+    if not breathing_px:
+        assert monitor.reading.reason == "background moving"
+
+
+def test_background_is_kept_in_step_with_samples():
+    m = run(15, seconds=33)
+    assert len(m.background) == len(m.samples)
+    m.reset()
+    assert not m.background

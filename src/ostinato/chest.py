@@ -66,6 +66,7 @@ class ChestTracker:
         self._gray = None
         self._box = None
         self.position = 0.0
+        self.background = 0.0  # vertical motion subtracted so far
         self.box = None
 
     def _median_flow(self, gray, mask):
@@ -118,4 +119,5 @@ class ChestTracker:
         if np.linalg.norm(step) > MAX_STEP:
             return np.nan, "too much movement"
         self.position += float(step[1])
+        self.background += float(camera[1]) / width
         return self.position, "ok"

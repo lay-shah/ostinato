@@ -98,7 +98,7 @@ def capture(camera, view):
     edges = [0.0, *times, elapsed]
     if not times or max(b - a for a, b in pairwise(edges)) > 1:
         raise ValueError("Camera timing interrupted; repeat the trial")
-    reading = estimate(times, motion)
+    reading = estimate(times, motion, monitor.background)
     trace.append((elapsed, r.bpm, r.confidence, r.reason))
     while True:
         raw = input("Observer's breath count for this window: ").strip()

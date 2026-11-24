@@ -112,3 +112,11 @@ def test_varying_breath_depth_is_still_measured():
         r = estimate(t, depth * breathing(t, rng.uniform(10, 24), phase=rng.uniform(0, 6)))
         ok += r.bpm is not None
     assert ok >= 54
+
+
+def test_background_check_only_rejects_mirrored_motion():
+    noise = np.random.default_rng(0).normal(0, 0.0003, len(T))
+    chest, sway = breath(15), breath(20, 0.01)
+    assert estimate(T, -sway + noise, sway).reason == "background moving"
+    assert estimate(T, chest + noise, sway + noise).bpm == pytest.approx(15, abs=1)
+    assert estimate(T, chest + noise, np.zeros_like(T)).bpm == pytest.approx(15, abs=1)
