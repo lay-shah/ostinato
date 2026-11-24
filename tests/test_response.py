@@ -284,3 +284,32 @@ def test_bad_landmarks_are_never_a_hand_position(index, value):
     pts[index] = value
     body = body_from_landmarks(pts, vis, (640, 640))
     assert body is None or body.left is None
+
+
+@pytest.mark.parametrize("wrist", [(300, 190), (345, 170), (270, 200), (326, 100)])
+def test_touching_the_face_is_not_a_raised_hand(wrist):
+    assert webcam(wrist).right == 0
+
+
+@pytest.mark.parametrize("rotate", np.radians([0, 90, 180, 270]))
+def test_face_touch_rule_works_lying_down(rotate):
+    vis = np.ones(33)
+    c, s = np.cos(rotate), np.sin(rotate)
+    flat = np.zeros((33, 2))
+    flat[0], flat[11], flat[12], flat[15], flat[16] = (0, -80), (60, 0), (-60, 0), (20, -60), (-90, 120)
+    assert body_from_landmarks(flat @ np.array([[c, s], [-s, c]]) + 300, vis, (640, 640)).left == 0
+
+
+def test_scratching_face_then_raising_properly():
+    def body(t):
+        if t < 4:
+            return webcam((190, 480), 0.2)
+        return webcam((300, 185)) if t < 7 else webcam((190, 194))
+
+    check, hits = ResponseCheck(Quiet()), []
+    for i in range(150):
+        if i == 30:
+            check.ask(i / 15)
+        if check.update(i / 15, body(i / 15)):
+            hits.append(i / 15)
+    assert len(hits) == 1 and hits[0] > 7.5
