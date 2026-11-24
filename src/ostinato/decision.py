@@ -61,13 +61,20 @@ class Assessor:
 
     After a MOVE decision, call `arrived` or `move_failed`. The caller must also
     discard signal collected while moving.
+
+    With `ask_first`, the assessor sets `wants_ask` once at each view before leaving
+    it or giving up, and waits while `update` is told that asking is under way. The
+    total time limit still applies.
     """
 
-    def __init__(self, t: float, extra_views: int, limits: Limits = Limits()):
+    def __init__(self, t: float, extra_views: int, limits: Limits = Limits(), ask_first: bool = False):
         if extra_views < 0:
             raise ValueError("extra_views cannot be negative")
         self.limits = limits
         self.views_left = extra_views
+        self.ask_first = ask_first
+        self.wants_ask = False
+        self._asked = False
         self.decision = Decision(Action.WAIT, Status.UNABLE, "starting")
         self._start = self._view_start = self._now = self._check(t)
         self._problem_since = None
@@ -90,6 +97,14 @@ class Assessor:
         self.decision = Decision(action, status, reason, bpm, completed)
         return self.decision
 
+    def _leave(self, reason, asking):
+        if asking:
+            return self._set(Action.WAIT, "waiting for a response")
+        if self.ask_first and not self._asked:
+            self._asked = self.wants_ask = True
+            return self._set(Action.WAIT, "asking for a response")
+        return self._next_view(reason)
+
     def _next_view(self, reason):
         if self.views_left:
             self.views_left -= 1
@@ -98,6 +113,7 @@ class Assessor:
 
     def _begin_view(self):
         self._view_start = self._now
+        self._asked = False
         self._problem_since = self._confirm_since = self._confirm_bpm = None
 
     def arrived(self, t: float) -> Decision:
@@ -113,11 +129,14 @@ class Assessor:
         self._tick(t)
         return self._next_view("could not reach view")
 
-    def update(self, t: float, reading: Reading, responded: bool = False) -> Decision:
+    def update(self, t: float, reading: Reading, responded: bool = False, asking: bool = False) -> Decision:
         """`responded=False` means no response was seen, which proves nothing."""
         if self.decision.final:
             return self.decision
         self._tick(t)
+        self.wants_ask = False
+        if asking:
+            self._asked = True
         if responded:
             return self._set(Action.REPORT, "response seen", Status.RESPONDED)
         moving = self.decision.action is Action.MOVE
@@ -136,12 +155,12 @@ class Assessor:
             if self._problem_since is None:
                 self._problem_since = t
             if t - self._problem_since >= self.limits.view_problem_seconds:
-                return self._next_view(reason)
+                return self._leave(reason, asking)
         else:
             self._problem_since = None
             reason = reading.reason
         if t - self._view_start >= self.limits.view_seconds:
-            return self._next_view(reason)
+            return self._leave(reason, asking)
         return self._set(Action.WAIT, reason)
 
     def _confirmed(self, reading):

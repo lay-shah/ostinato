@@ -154,8 +154,8 @@ def run_app(monkeypatch, keys, body, args=(), seconds=30, fps=10):
 
 
 def test_app_asks_once_per_view_then_gets_help(monkeypatch):
-    log, asks = run_app(monkeypatch, [("m", 8), ("m", 16)], lambda t: None)
-    assert len(asks) == 2
+    log, asks = run_app(monkeypatch, [("m", 18), ("m", 36)], lambda t: None, seconds=60)
+    assert len(asks) == 3
     assert [v for _, _, v in log if v] and {v for _, _, v in log} == {1, 2, 3}
     assert log[-1][1].action is Action.GET_HELP and log[-1][1].bpm is None
 
@@ -171,9 +171,27 @@ def test_app_prompt_options(monkeypatch):
     assert run_app(monkeypatch, [("v", 2)], lambda t: None, ["--video", "x"])[1] == []
 
 
+def test_app_waits_for_camera_permission(monkeypatch, capsys):
+    opened, naps = [], []
+
+    class Cap:
+        def isOpened(self):
+            return len(opened) == 3
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda i: opened.append(i) or Cap())
+    assert app.open_camera(0, naps.append) is not None and len(naps) == 2
+    assert capsys.readouterr().out.count("allow camera access") == 1
+    opened.clear()
+    monkeypatch.setattr(Cap, "isOpened", lambda self: False)
+    assert app.open_camera(0, naps.append) is None
+
+
 def test_hand_raise_after_moving_needs_a_new_prompt(monkeypatch):
     log, _ = run_app(
-        monkeypatch, [("m", 7)], lambda t: Body((300, 200), 200, 0.8 if 8 < t < 10 else -1, None), seconds=11
+        monkeypatch, [("m", 18)], lambda t: Body((300, 200), 200, 0.8 if 19 < t < 21 else -1, None), seconds=22
     )
     assert not log[-1][1].final
 

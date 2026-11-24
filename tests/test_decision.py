@@ -153,3 +153,40 @@ def test_random_sequences_always_finish_safely():
             assert t < 185
         assert (a.decision.bpm is not None) == (a.decision.status is Status.MEASURED)
         assert a.decision.bpm in measured or a.decision.bpm is None
+
+
+def test_asks_once_before_leaving_each_view_and_before_giving_up():
+    a, t, asks, log = Assessor(0, 1, ask_first=True), 0.0, [], []
+    asking_until = -1.0
+    while not a.decision.final:
+        d = a.update(t, bad("chest not visible"), asking=t < asking_until)
+        if a.wants_ask:
+            asks.append(t)
+            asking_until = t + 12
+        if d.action is Action.MOVE:
+            log.append(t)
+            a.arrived(t)
+        t += 0.5
+        assert t < 181
+    assert len(asks) == 2 and len(log) == 1
+    assert log[0] >= asks[0] + 12 and t >= asks[1] + 12
+    assert a.decision.action is Action.GET_HELP and a.decision.bpm is None
+
+
+def test_asking_by_hand_counts_and_never_exceeds_the_time_limit():
+    a = Assessor(0, 1, ask_first=True)
+    a.update(1, bad("chest not visible"), asking=True)
+    assert feed(a, bad("chest not visible"), 2, 10).action is Action.MOVE
+    b, t = Assessor(0, 3, ask_first=True), 0.0
+    while not b.decision.final:
+        b.update(t, bad("chest not visible"), asking=True)
+        t += 1
+    assert b.decision.action is Action.GET_HELP and b.decision.completed_at_s == 180
+
+
+def test_reading_found_while_asking_is_still_reported():
+    a = Assessor(0, 0, ask_first=True)
+    feed(a, bad("chest not visible"), 0, 5)
+    a.update(6, OK, asking=True)
+    d = a.update(9, OK, asking=True)
+    assert d.action is Action.REPORT and d.bpm == 15

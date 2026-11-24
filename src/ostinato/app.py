@@ -18,6 +18,22 @@ WINDOW = 30.0  # seconds of signal used for each reading
 EXTRA_VIEWS = 2  # times the app may ask for a different camera position
 
 
+CAMERA_TRIES = 20  # about one second apart, while macOS asks for permission
+
+
+def open_camera(index, sleep=time.sleep):
+    """Open a camera, waiting for a permission prompt to be answered."""
+    for n in range(CAMERA_TRIES):
+        cap = cv2.VideoCapture(index)
+        if cap.isOpened():
+            return cap
+        cap.release()
+        if n == 0:
+            print("Waiting for the camera. If asked, allow camera access. Press Ctrl+C to stop.", flush=True)
+        sleep(1)
+    return None
+
+
 class Monitor:
     """Rolling window of chest motion."""
 
@@ -57,17 +73,24 @@ def main(argv=None):
     parser.add_argument("--video", help="analyze a local video instead of the camera")
     args = parser.parse_args(argv)
 
-    cap = cv2.VideoCapture(args.video if args.video else args.camera)
-    if not cap.isOpened():
-        parser.exit(1, "Could not open the camera or video. Check camera permission.\n")
+    try:
+        cap = cv2.VideoCapture(args.video) if args.video else open_camera(args.camera)
+    except KeyboardInterrupt:
+        parser.exit(1, "Stopped.\n")
+    if cap is None or not cap.isOpened():
+        parser.exit(
+            1,
+            "Could not open the camera or video. On a Mac, allow your terminal app in System Settings,\n"
+            "Privacy & Security, Camera, then quit and reopen it. Another app may also be using the camera.\n",
+        )
     fps = cap.get(cv2.CAP_PROP_FPS)
     if args.video and not fps > 0:
         parser.exit(1, "The video has no usable frame rate.\n")
     finder = PoseFinder()
     monitor = Monitor(ChestTracker(finder))
-    assessor = Assessor(0.0, EXTRA_VIEWS)
+    prompts = not (args.video or args.no_prompt)
+    assessor = Assessor(0.0, EXTRA_VIEWS, ask_first=prompts)
     check = ResponseCheck(Speaker())
-    asked = False  # at this viewpoint
     start, n = time.monotonic(), 0
     cv2.namedWindow(TITLE, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     cv2.resizeWindow(TITLE, W, H)
@@ -83,12 +106,11 @@ def main(argv=None):
             n += 1
             reading = monitor.update(frame, t)
             responded = check.update(t, finder.body)
-            decision = assessor.update(t, reading, responded)
+            decision = assessor.update(t, reading, responded, check.active)
             if decision.final:
                 if check.active:
                     check.cancel()
-            elif decision.action is Action.MOVE and not (asked or args.video or args.no_prompt):
-                asked = True
+            elif assessor.wants_ask:
                 check.ask(t)
             view = EXTRA_VIEWS + 1 - assessor.views_left - (decision.action is Action.MOVE)
             screen, _ = compose(frame, monitor, decision, check, view, EXTRA_VIEWS + 1, WINDOW)
@@ -97,18 +119,15 @@ def main(argv=None):
             if key == ord("q") or cv2.getWindowProperty(TITLE, cv2.WND_PROP_VISIBLE) < 1:
                 break
             if key == ord("v") and not (decision.final or args.video):
-                asked = True
                 check.ask(t)
             elif key == ord("m") and assessor.decision.action is Action.MOVE:
                 monitor.reset()
                 check.cancel()
-                asked = False
                 assessor.arrived(t)
             elif key == ord("r"):
                 monitor.reset()
                 check.cancel()
-                asked = False
-                assessor = Assessor(t, EXTRA_VIEWS)
+                assessor = Assessor(t, EXTRA_VIEWS, ask_first=prompts)
     except KeyboardInterrupt:
         pass
     finally:
