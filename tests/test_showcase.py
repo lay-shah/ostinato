@@ -5,7 +5,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 
-
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 PAGES = {"index.html", "PROJECT_REPORT.html"}
 
