@@ -83,6 +83,9 @@ class _Arm:
         """Return how long the hand has been held up after being down."""
         if self._last is not None and t - self._last > MAX_GAP:
             self.reset()
+        if self._up_since is not None and (height is None or height < RAISED):
+            # An interrupted raise must be followed by a fresh observed lower.
+            self._was_down = False
         if height is None:
             self._up_since = self._down_since = None  # a hold must be seen throughout
             return 0.0

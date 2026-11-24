@@ -221,6 +221,24 @@ def test_pre_raised_hand_does_not_mask_other_hand():
     assert len(hits) == 1 and hits[0] >= 3.6
 
 
+@pytest.mark.parametrize("interruption", [None, 0.15, "lost"])
+def test_pre_raised_hand_requires_fresh_lower_after_interruption(interruption):
+    def height(t):
+        if t < 1:
+            return -1
+        if 3 <= t < 3.2:
+            return interruption
+        return 0.8
+
+    hit, check = play(height)
+    assert hit is None and check.outcome == "none seen"
+
+
+def test_pre_raised_hand_can_respond_after_being_lowered_again():
+    hit, check = play(lambda t: -1 if t < 1 or 5 <= t < 6 else 0.8)
+    assert 6.5 < hit < 7 and check.outcome == "response"
+
+
 def test_completed_raise_survives_lowering_before_speech_finishes():
     hit, check = play(lambda t: .8 if 2.3 < t < 3.3 else -1)
     assert hit == pytest.approx(4.0, abs=.1)
