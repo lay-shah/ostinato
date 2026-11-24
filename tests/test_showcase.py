@@ -3,10 +3,11 @@
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
+from runpy import run_path
 from urllib.parse import urlsplit
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
-PAGES = {"index.html", "PROJECT_REPORT.html"}
+PAGES = {"index.html", "PROJECT_REPORT.html", "live.html"}
 
 
 class Links(HTMLParser):
@@ -32,12 +33,20 @@ def test_showcase_navigation():
         parsed[page] = document
 
     for page, document in parsed.items():
-        assert PAGES - {page} <= {urlsplit(link).path for link in document.hrefs}
+        if page == "index.html":
+            assert PAGES - {page} <= {urlsplit(link).path for link in document.hrefs}
+        else:
+            assert any(Path(urlsplit(link).path) == Path("index.html") for link in document.hrefs)
         for link in document.hrefs:
             url = urlsplit(link)
             if url.scheme or url.netloc:
                 continue
-            target = url.path or page
+            target = str(Path(url.path or page))
             assert target in parsed, (page, link)
             if url.fragment:
                 assert url.fragment in parsed[target].ids, (page, link)
+
+
+def test_web_core_matches_python_sources():
+    build = run_path(str(DOCS / "build_web_core.py"))["build"]
+    assert (DOCS / "live-core.json").read_text(encoding="utf-8") == build(DOCS.parent / "src/ostinato")
