@@ -3,6 +3,8 @@
 import cv2
 import numpy as np
 
+from .response import body_from_landmarks
+
 MIN_VISIBILITY = 0.7
 MIN_POINTS = 12
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
@@ -15,17 +17,21 @@ class PoseFinder:
     def __init__(self):
         import mediapipe as mp
 
+        self.body = None  # arm positions from the latest frame
+
         self._pose = mp.solutions.pose.Pose(model_complexity=1)
 
     def __call__(self, bgr):
         """Return pixel array [l_shoulder, r_shoulder, l_hip, r_hip] or None."""
+        self.body = None
         result = self._pose.process(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
         if not result.pose_landmarks:
             return None
         marks = result.pose_landmarks.landmark
+        h, w = bgr.shape[:2]
+        self.body = body_from_landmarks([(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks])
         if min(marks[11].visibility, marks[12].visibility) < MIN_VISIBILITY:
             return None
-        h, w = bgr.shape[:2]
         return np.array([[marks[i].x * w, marks[i].y * h] for i in (11, 12, 23, 24)])
 
     def close(self):
