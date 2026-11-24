@@ -65,7 +65,51 @@ def test_voice_completion_and_raised_wrist_report_a_response(engine):
     assert state["prompt"]["outcome"] == "response"
 
 
-def test_real_optical_flow_confirms_periodic_chest_motion(engine):
+def test_weak_view_allows_a_held_raise_after_a_face_touch(engine):
+    blank = bytes(WIDTH * HEIGHT * 4)
+    marks = pose()
+    marks[15] = [.35, 1.2, .2]  # a resting wrist is below the camera frame
+    for i in range(11):
+        frame(engine, i / 10, blank, marks)
+    engine.command(1, "prompt")
+
+    marks[15] = [.49, .19, 1]  # a visible wrist at the face
+    for i in range(11, 56):
+        state = frame(engine, i / 10, blank, marks)
+    assert state["tracking"] == "not enough chest detail"
+    assert state["decision"]["action"] == "wait"
+    assert state["prompt"]["state"] == "watching"
+    assert state["prompt"]["outcome"] is None
+
+    marks[15] = [.30, .24, 1]  # above the shoulder and out to the side
+    for i in range(56, 65):
+        state = frame(engine, i / 10, blank, marks)
+    assert state["decision"]["status"] == "responded"
+    assert state["prompt"]["outcome"] == "response"
+
+
+def test_close_webcam_tracks_the_chest_up_to_the_frame_edge(engine):
+    rgba = np.random.default_rng(124).integers(0, 256, (HEIGHT, WIDTH, 4), dtype=np.uint8)
+    marks = pose()
+    for index in (11, 12):
+        marks[index][1] = .80
+    for index in (23, 24):
+        marks[index][1:] = [1.2, .2]
+
+    frame(engine, 0, rgba, marks)
+    state = frame(engine, .1, rgba, marks)
+    assert state["tracking"] == "ok"
+    assert state["box"][3] == HEIGHT
+
+    for index in (11, 12):
+        marks[index][1] = .84
+    state = frame(engine, .2, rgba, marks)
+    assert state["tracking"] == "chest not visible"
+    assert state["box"] is None
+
+
+@pytest.mark.parametrize("head_moves", [False, True], ids=["chest-only", "head-and-chest"])
+def test_real_optical_flow_distinguishes_breathing_from_rocking(engine, head_moves):
     texture = np.random.default_rng(934855).choice([25, 225], size=(HEIGHT, WIDTH)).astype(np.uint8)
     rgba = np.empty((HEIGHT, WIDTH, 4), dtype=np.uint8)
     rgba[:, :, 3] = 255
@@ -77,7 +121,14 @@ def test_real_optical_flow_confirms_periodic_chest_motion(engine):
         shift = round(3 * math.sin(2 * math.pi * .25 * t))
         rgba[:, :, :3] = texture[:, :, None]
         rgba[100:224, 165:315, :3] = texture[100 + shift:224 + shift, 165:315, None]
+        if head_moves:
+            rgba[5:75, 205:275, :3] = texture[5 + shift:75 + shift, 205:275, None]
         state = frame(engine, t, rgba, marks)
     assert state["tracking"] == "ok"
-    assert state["decision"]["status"] == "breathing measured"
-    assert state["decision"]["bpm"] == pytest.approx(15, abs=1)
+    if head_moves:
+        assert state["reading"]["reason"] == "whole body moving"
+        assert state["decision"]["status"] == "unable to assess"
+        assert state["decision"]["bpm"] is None
+    else:
+        assert state["decision"]["status"] == "breathing measured"
+        assert state["decision"]["bpm"] == pytest.approx(15, abs=1)
