@@ -18,6 +18,7 @@ MIN_CONFIDENCE = 0.8
 MIN_RMS = 2e-4  # smallest usable motion, in shoulder widths
 FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for faded motion
 FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
+MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
 MAX_RATE_SPREAD = 4.0  # disagreement between window halves, breaths/min
 
 
@@ -97,10 +98,23 @@ def _faded(velocity: np.ndarray, rate: float) -> bool:
     return bool(rms.min() < FADE_RATIO * np.median(rms))
 
 
-def estimate(times, values) -> Reading:
+def _mirrors(signal: np.ndarray, background: np.ndarray) -> bool:
+    """True if the signal looks like background motion turned upside down.
+
+    Background motion is subtracted to cancel camera shake. Real shake also moves
+    the chest, so nothing of it is left. A curtain or fan moves only the
+    background, and subtracting it would invent a breathing signal.
+    """
+    if np.std(background) < 0.1 * np.std(signal):
+        return False
+    return bool(np.corrcoef(signal, background)[0, 1] < -MAX_MIRRORING)
+
+
+def estimate(times, values, background=None) -> Reading:
     """Estimate from timestamps (s) and displacement (shoulder widths).
 
-    Use NaN for frames in which the chest could not be tracked.
+    Use NaN for frames in which the chest could not be tracked. `background` is the
+    background displacement already subtracted from `values`, if known.
     """
     t = np.asarray(times, float)
     x = np.asarray(values, float)
@@ -123,6 +137,10 @@ def estimate(times, values) -> Reading:
     y = np.interp(grid, tg, xg)
     y = y - np.polyval(np.polyfit(grid - grid[0], y, 1), grid - grid[0])
 
+    b = None
+    if background is not None:
+        b = np.interp(grid, tg, np.asarray(background, float)[good])
+
     sos = butter(2, [SEARCH_BPM[0] / 60 * 0.8, SEARCH_BPM[1] / 60 * 1.2], "bandpass", fs=FS, output="sos")
     filtered = sosfiltfilt(sos, y)
     rms = float(np.sqrt(np.mean(filtered**2)))
@@ -131,6 +149,9 @@ def estimate(times, values) -> Reading:
     # A lurch dwarfs normal breaths.
     if np.abs(filtered).max() > 5 * np.median(np.abs(filtered)) + 1e-12:
         return _decline("too much movement")
+
+    if b is not None and _mirrors(filtered, sosfiltfilt(sos, b - b.mean())):
+        return _decline("background moving")
 
     # Accumulated tracking error is a random walk, whose low-frequency power can
     # imitate slow breathing. Its velocity has a flat spectrum, so require a

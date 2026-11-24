@@ -30,6 +30,7 @@ VIEW_PROBLEMS = {
     "not enough chest detail",
     "cannot check camera motion",
     "signal too weak",
+    "background moving",
 }
 
 
