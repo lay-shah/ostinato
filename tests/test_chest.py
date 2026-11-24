@@ -200,3 +200,14 @@ def test_finished_rate_is_marked_as_past():
     a.update(25, Reading(16.0, 0.9, "ok"))
     headline, _ = decision_text(a.update(28, Reading(16.0, 0.9, "ok")))
     assert headline == "PAST RESULT at 28s: 16.0 breaths/min"
+
+
+def test_chest_cut_off_by_a_close_webcam_is_still_measured():
+    from ostinato.chest import chest_box
+
+    # Positions the pose model gave for a real seated frame, 640 x 360.
+    pts = np.array([[412, 252], [240, 240], [380, 498], [255, 493]], float)
+    _, y0, _, y1, _ = chest_box(pts, (360, 640))
+    assert y1 == 360 and y1 - y0 > 90
+    assert chest_box(pts + [0, 60], (360, 640)) is None  # too little chest left
+    assert chest_box(pts + [260, 0], (360, 640)) is None

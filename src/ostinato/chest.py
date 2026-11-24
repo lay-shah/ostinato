@@ -7,6 +7,7 @@ from .response import body_from_landmarks
 
 MIN_VISIBILITY = 0.7
 MIN_POINTS = 12
+MIN_CHEST = 0.4  # least chest height in view, in shoulder widths
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
 MAX_CAMERA_STEP = 0.03
 
@@ -29,7 +30,7 @@ class PoseFinder:
             return None
         marks = result.pose_landmarks.landmark
         h, w = bgr.shape[:2]
-        self.body = body_from_landmarks([(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks])
+        self.body = body_from_landmarks([(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks], (w, h))
         if min(marks[11].visibility, marks[12].visibility) < MIN_VISIBILITY:
             return None
         return np.array([[marks[i].x * w, marks[i].y * h] for i in (11, 12, 23, 24)])
@@ -48,7 +49,8 @@ def chest_box(points, shape):
     cx, cy = (left + right) / 2
     x0, x1 = cx - 0.4 * width, cx + 0.4 * width
     y0, y1 = cy + 0.05 * width, cy + 0.7 * width
-    if x0 < 0 or y0 < 0 or x1 > w or y1 > h:
+    y1 = min(y1, h)  # a close webcam often cuts off the lower chest
+    if x0 < 0 or y0 < 0 or x1 > w or y1 - y0 < MIN_CHEST * width:
         return None
     return int(x0), int(y0), int(x1), int(y1), width
 

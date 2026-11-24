@@ -31,7 +31,7 @@ pytest
 ostinato
 ```
 
-Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and chest visible and some background on at least one side. Patterned clothing works best. The first reading takes at least 25 seconds. If the app cannot get a reading, it asks the person out loud to raise one hand, using the voice built into your computer, and tells you to reposition the camera and press M. Press V to ask at any time, or start with `--no-prompt` to ask only on V. A hand counts only if it was seen down, then held up after the request. It needs the head, both shoulders and that wrist in view, and cannot tell who raised a hand if people swap places. Not responding proves nothing. Press R to restart the assessment or Q to quit.
+Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and chest visible and some background on at least one side. Patterned clothing works best. The first reading takes at least 25 seconds. If the app cannot get a reading, it asks the person out loud to raise one hand, using the voice built into your computer, and tells you to reposition the camera and press M. Press V to ask at any time, or start with `--no-prompt` to ask only on V. A hand counts only if it was seen down, then held up after the request. A hand resting below the frame counts as down, but the raised wrist must be seen. It needs the head, both shoulders and that wrist in view, and cannot tell who raised a hand if people swap places. Not responding proves nothing. Press R to restart the assessment or Q to quit.
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 

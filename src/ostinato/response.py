@@ -13,12 +13,12 @@ import numpy as np
 
 PROMPT = "If you can hear me, please raise one hand."
 MIN_VISIBILITY = 0.7
-RAISED = 0.3  # wrist past the shoulder line toward the head, in shoulder widths
-LOWERED = 0.0
+RAISED = 0.1  # wrist past the shoulder line toward the head, in shoulder widths
+LOWERED = -0.2
 DOWN_SECONDS = 0.5  # a hand must first be seen down for this long
 HOLD_SECONDS = 0.6  # and then be held up for this long
 LISTEN_SECONDS = 10.0
-MAX_GAP = 0.5  # seconds without a view of the arm before its history is dropped
+MAX_GAP = 1.0  # seconds without a view of the arm before its history is dropped
 MAX_JUMP = 0.5  # body shift between frames, in shoulder widths: maybe someone else
 
 
@@ -32,8 +32,9 @@ class Body:
     right: float | None
 
 
-def body_from_landmarks(points, visibility):
+def body_from_landmarks(points, visibility, size):
     """`points` and `visibility` follow MediaPipe's 33 pose landmarks, in pixels.
+    `size` is the frame (width, height).
 
     Height is measured from the shoulders toward the nose, so it does not depend on
     the person being upright. Returns None if the direction cannot be measured.
@@ -52,9 +53,14 @@ def body_from_landmarks(points, visibility):
     up = up * math.copysign(1, toward_head)
 
     def height(i):
-        if visibility[i] < MIN_VISIBILITY:
-            return None
-        return float((np.asarray(points[i], float) - center) @ up) / width
+        x, y = points[i]
+        value = float((np.array([x, y], float) - center) @ up) / width
+        inside = 0 <= x < size[0] and 0 <= y < size[1]
+        if inside:
+            return value if visibility[i] >= MIN_VISIBILITY else None
+        # A resting hand is often just out of frame. The model's guess is enough to
+        # call it down, but a raised hand must really be seen.
+        return value if value <= LOWERED else None
 
     return Body((float(center[0]), float(center[1])), width, height(15), height(16))
 
@@ -68,6 +74,10 @@ class _Arm:
     def reset(self):
         self._last = self._down_since = self._up_since = None
         self._was_down = False
+
+    @property
+    def raised_since(self):
+        return self._up_since
 
     def update(self, t, height):
         """Return how long the hand has been held up after being down."""
@@ -151,6 +161,7 @@ class ResponseCheck:
         self.speaker = speaker
         self.state = "idle"
         self.outcome = None  # "response" or "none seen", for the latest prompt
+        self._seen = False
         self._arms = (_Arm(), _Arm())
         self._body = self._watch_start = self._asked_at = None
 
@@ -161,6 +172,7 @@ class ResponseCheck:
     def ask(self, t):
         if not self.active:
             self.state, self._asked_at, self.outcome = "speaking", t, None
+            self._seen = False
             self.speaker.start(t)
 
     def cancel(self):
@@ -175,18 +187,23 @@ class ResponseCheck:
         if body is not None:
             old = self._body
             if old is not None and math.dist(body.center, old.center) > MAX_JUMP * old.width:
+                self._seen = False
                 for arm in self._arms:
                     arm.reset()
             self._body = body
         heights = (None, None) if body is None else (body.left, body.right)
         held = [arm.update(t, h) for arm, h in zip(self._arms, heights)]
 
+        if self.active:
+            for duration, arm in zip(held, self._arms):
+                if duration >= HOLD_SECONDS and arm.raised_since >= self._asked_at:
+                    self._seen = True
         if self.state == "speaking" and self.speaker.finished(t):
             self.state, self._watch_start = "watching", t
         if self.state != "watching":
             return False
         # The hand must be raised after the request, or while it was being made.
-        if max(held) >= HOLD_SECONDS and t - max(held) >= self._asked_at:
+        if self._seen:
             self.state, self.outcome = "done", "response"
             return True
         if t - self._watch_start >= LISTEN_SECONDS:
@@ -200,4 +217,4 @@ class ResponseCheck:
         how = "Voice unavailable: showing text only" if self.speaker.failed else "Asked out loud"
         if self.state == "speaking":
             return f"ASKING: {PROMPT}", how if self.speaker.failed else "Speaking now"
-        return "WATCHING for a raised hand", f"{how}. No response would prove nothing."
+        return "WATCHING for a raised hand", f"{how}. Start with hands down, then raise one and hold."

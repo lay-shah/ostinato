@@ -13,12 +13,12 @@ W, H = 1080, 660
 VIDEO = (24, 120, 664, 600)  # x0, y0, x1, y1
 PANEL = (688, 1056)
 
-BG, CARD, LINE = (17, 21, 24), (27, 33, 37), (52, 61, 67)
-INK, DIM = (240, 243, 244), (158, 170, 178)
+BG, CARD, LINE = (16, 26, 36), (22, 35, 48), (56, 76, 94)
+INK, DIM = (236, 242, 248), (179, 196, 212)
 GREEN, AMBER, BLUE = (116, 211, 150), (250, 178, 84), (128, 188, 250)
 
 HINTS = {
-    "chest not visible": "Face the camera with head and chest in view",
+    "chest not visible": "Sit back: show your head and chest",
     "not enough chest detail": "Try patterned clothing or more light",
     "cannot check camera motion": "Show some background beside the person",
     "camera moving": "Keep the camera still",
@@ -57,7 +57,7 @@ def prompt_status(check):
     if check is None or check.state == "idle":
         return "Not asked yet", DIM
     if check.active:
-        return "Asking now", BLUE
+        return ("Watching for hand" if check.state == "watching" else "Asking now"), BLUE
     if check.outcome == "response":
         return "Hand raise seen", GREEN
     return "None seen (proves nothing)", AMBER
