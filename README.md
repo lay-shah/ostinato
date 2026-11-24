@@ -6,9 +6,13 @@ Ostinato is a planned autonomous robot that helps responders find and assess cas
 
 > Research prototype. Not a medical device, and not for use in real emergencies. No detected motion must never be reported as "not breathing" or "dead".
 
+## Explore Ostinato
+
+[Open the interactive signal demo](https://sahilnpatel.github.io/ostinato/) or [read the project report](https://sahilnpatel.github.io/ostinato/PROJECT_REPORT.html). The public demo uses synthetic inputs and runs in the browser. For an offline copy, open `docs/index.html` and keep `docs/PROJECT_REPORT.html` alongside it. The Python application below runs the actual webcam assessment.
+
 ## First prototype
 
-- Live breathing-rate measurement from a laptop camera, with a confidence score
+- Live breathing-rate measurement from a laptop camera, with a heuristic signal-quality score
 - A simulated robot that chooses where to look next
 - A ranked map explaining why each person was prioritized
 
