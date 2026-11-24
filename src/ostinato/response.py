@@ -15,6 +15,7 @@ PROMPT = "If you can hear me, please raise one hand."
 MIN_VISIBILITY = 0.7
 RAISED = 0.1  # wrist past the shoulder line toward the head, in shoulder widths
 LOWERED = -0.2
+MIN_SIDE = 0.4  # shoulder widths from the body midline; a hand at the face is closer
 DOWN_SECONDS = 0.5  # a hand must first be seen down for this long
 HOLD_SECONDS = 0.6  # and then be held up for this long
 LISTEN_SECONDS = 10.0
@@ -56,7 +57,10 @@ def body_from_landmarks(points, visibility, size):
         x, y = points[i]
         if not (math.isfinite(x) and math.isfinite(y)):
             return None
-        value = float((np.array([x, y], float) - center) @ up) / width
+        offset = np.array([x, y], float) - center
+        value = float(offset @ up) / width
+        if value > 0 and abs(float(offset @ across)) / width**2 < MIN_SIDE:
+            value = 0.0  # near the face or chest: neither raised nor down
         inside = 0 <= x < size[0] and 0 <= y < size[1]
         if inside:
             return value if visibility[i] >= MIN_VISIBILITY else None
