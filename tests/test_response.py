@@ -243,3 +243,35 @@ def test_completed_raise_survives_lowering_before_speech_finishes():
     hit, check = play(lambda t: .8 if 2.3 < t < 3.3 else -1)
     assert hit == pytest.approx(4.0, abs=.1)
     assert check.outcome == "response"
+
+
+@pytest.mark.parametrize("lost", [62, 64, 66])
+def test_one_lost_frame_during_a_raise_still_counts(lost):
+    hit, check = play(lambda t: -1 if t < 4 else None if round(t * 15) == lost else 0.24)
+    assert 4.6 < hit < 5.2 and check.outcome == "response"
+
+
+@pytest.mark.parametrize("hidden", [(1.95, 2.05), (1.6, 2.4), (1.9, 2.0), (2.0, 2.1)])
+def test_pre_raised_hand_hidden_at_the_prompt_is_not_a_response(hidden):
+    def height(t):
+        if t < 0.8:
+            return -1
+        return None if hidden[0] <= t <= hidden[1] else 0.8
+
+    hit, check = play(height)
+    assert hit is None and check.outcome == "none seen"
+
+
+def test_half_lowered_hand_at_the_prompt_needs_a_fresh_lower():
+    assert play(lambda t: -1 if t < 0.8 else 0 if 1.8 < t < 2.4 else 0.8)[0] is None
+
+
+def test_second_prompt_needs_a_second_raise():
+    check, hits = ResponseCheck(Quiet()), []
+    for i in range(400):
+        t = i / 15
+        if i in (30, 150):
+            check.ask(t)
+        if check.update(t, Body((300, 200), 200, -1 if t < 5 else 0.8, None)):
+            hits.append(t)
+    assert len(hits) == 1 and check.outcome == "none seen"
