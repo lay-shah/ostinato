@@ -1,5 +1,5 @@
-import first_look
+import ostinato
 
 
 def test_package_imports():
-    assert first_look.__doc__
+    assert ostinato.__doc__
