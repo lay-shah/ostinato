@@ -11,6 +11,7 @@ import json
 import math
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -224,7 +225,8 @@ def assess(robot, person, views, policy):
     del views[index]
     while not a.decision.final:
         robot.t += 1.0
-        d = a.update(robot.t, observe(person, index, robot.t - arrived))
+        reading = observe(person, index, robot.t - arrived)
+        d = a.update(robot.t, reading)
         while d.action is Action.MOVE:
             cost, _ = robot.paths()
             index = choose_view(known, views, cost, policy)
@@ -238,9 +240,10 @@ def assess(robot, person, views, policy):
             else:
                 break
     d = a.decision
+    score = reading.confidence if d.bpm is not None else None
     return {
         "person": known.id, "reached_s": reached, "finished_s": robot.t, "views": used,
-        "status": d.status.value, "bpm": d.bpm, "reason": d.reason,
+        "status": d.status.value, "bpm": d.bpm, "score": score, "reason": d.reason,
     }  # fmt: skip
 
 
@@ -255,7 +258,7 @@ def run(scene, order, view):
             del waiting[i]
             results.append({
                 "person": i, "reached_s": None, "finished_s": None, "views": [],
-                "status": Status.UNABLE.value, "bpm": None, "reason": "no reachable view",
+                "status": Status.UNABLE.value, "bpm": None, "score": None, "reason": "no reachable view",
             })  # fmt: skip
     while waiting:
         cost, _ = robot.paths()
@@ -385,6 +388,7 @@ def main(argv=None):
     s.add_argument("seed", type=int)
     s.add_argument("--policy", choices=[BASELINE, "ranked"], default="ranked")
     s.add_argument("--image", help="save a map as a PNG")
+    s.add_argument("--html", help="save the offline medic page")
     args = parser.parse_args(argv)
     if args.command == "compare":
         if args.scenes < 1 or args.first_seed < 0:
@@ -399,6 +403,10 @@ def main(argv=None):
     out = run(scene, *choice)
     if args.image:
         draw(scene, out, args.image)
+    if args.html:
+        from .medic import render
+
+        Path(args.html).write_text(render(scene, out), encoding="utf-8")
     out.pop("track")
     print(json.dumps({"source": "simulation", **out, "attention_order": rank_for_medics(out["results"])}, indent=2))
 
