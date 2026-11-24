@@ -77,3 +77,25 @@ def test_trial_folder_is_ready_before_recording(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(viewpoints, "capture", capture)
     viewpoints.main(["trial", str(out), "--views", "A", "B"])
     assert out.exists() and "coverage" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("reasons", "good"), [(["starting", "ok"], True), (["chest not visible"], False)])
+def test_framing_check_advises_and_always_ends(monkeypatch, capsys, reasons, good):
+    from types import SimpleNamespace
+
+    from ostinato import viewpoints
+
+    clock, n = [0.0], [0]
+
+    def read():
+        clock[0] += 0.1
+        return True, "frame"
+
+    def update(_):
+        n[0] += 1
+        return 0, reasons[min(n[0] - 1, len(reasons) - 1)]
+
+    monkeypatch.setattr(viewpoints, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    result = viewpoints.check_framing(SimpleNamespace(read=read), SimpleNamespace(update=update), lambda f: f)
+    assert result == good and clock[0] < 9
+    assert ("Recording anyway" in capsys.readouterr().out) != good

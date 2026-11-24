@@ -110,7 +110,7 @@ def test_paired_trial_from_synthetic_frames_to_decision(monkeypatch, tmp_path, c
         def close(self):
             pass
 
-    answers = iter(["", "8", "", "8"])
+    answers = iter(["", "", "8", "", "", "8"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     monkeypatch.setattr(cv2, "VideoCapture", Camera)
     monkeypatch.setattr(chest, "PoseFinder", Pose)
@@ -165,7 +165,7 @@ def test_trial_replay_matches_live_rules_through_brief_dropouts(monkeypatch):
         def close(self):
             pass
 
-    answers = iter(["", "8"])
+    answers = iter(["", "", "8"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     monkeypatch.setattr(cv2, "VideoCapture", Camera)
     monkeypatch.setattr(chest, "PoseFinder", Pose)

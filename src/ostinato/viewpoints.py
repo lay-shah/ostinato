@@ -53,6 +53,32 @@ def summarize(pairs, tolerance_bpm=2.0):
     }
 
 
+FRAMING_SECONDS, STEADY_SECONDS = 8.0, 2.0
+
+
+def check_framing(cap, tracker, shrink):
+    """Say whether the chest can be tracked. Advice only: the trial records either way."""
+    start, since, last = time.monotonic(), None, None
+    while time.monotonic() - start < FRAMING_SECONDS:
+        ok, frame = cap.read()
+        if not ok:
+            raise ValueError("Camera stopped; repeat the trial")
+        _, reason = tracker.update(shrink(frame))
+        now = time.monotonic()
+        if reason == "ok":
+            since = now if since is None else since
+            if now - since >= STEADY_SECONDS:
+                print("Framing looks good.", flush=True)
+                return True
+        else:
+            since = None
+            if reason not in ("starting", last):
+                last = reason
+                print(f"Not ready yet: {reason}", flush=True)
+    print("Chest not tracked steadily. Recording anyway, so difficult views count.", flush=True)
+    return False
+
+
 def capture(camera, view):
     import cv2
 
@@ -67,6 +93,16 @@ def capture(camera, view):
         if not cap.isOpened():
             raise ValueError("Camera unavailable")
         finder = PoseFinder()
+
+        def shrink(frame):
+            if frame.shape[1] <= 640:
+                return frame
+            scale = 640 / frame.shape[1]
+            return cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        check_framing(cap, ChestTracker(finder), shrink)
+        input("Keep still. Observer, press Enter and start counting at START. ")
+        cap.read()  # drop a frame that waited while you read this
         # The same monitor as the live app, recorded on every frame, so replay
         # sees each tracking dropout that would have restarted confirmation.
         monitor = Monitor(ChestTracker(finder))
@@ -80,9 +116,7 @@ def capture(camera, view):
             elapsed = time.monotonic() - start
             if elapsed >= WINDOW_SECONDS:
                 break
-            if frame.shape[1] > 640:
-                scale = 640 / frame.shape[1]
-                frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            frame = shrink(frame)
             r = monitor.update(frame, elapsed)
             times.append(elapsed)
             motion.append(monitor.samples[-1][1])

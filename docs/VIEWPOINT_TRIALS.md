@@ -32,6 +32,8 @@ python -m ostinato.viewpoints trial data/pair-02.json --views angled-2m front-1m
 python -m ostinato.viewpoints report data/pair-01.json data/pair-02.json
 ```
 
+Before each window the program spends up to 8 seconds saying whether it can track the chest. This is advice only and every view is recorded, so difficult views are not dropped.
+
 An observer counts breaths between each START and STOP and enters the count before seeing the estimate. Each view starts with a fresh tracker and has its own reference count. Use anonymous view labels. The command saves timestamps as elapsed durations, counts, estimated rates, signal scores and decline reasons. It never writes images or video. A completed pair needs two uninterrupted windows. Keep trial files local unless participants agreed to sharing.
 
 ## Read the report
