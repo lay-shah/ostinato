@@ -2,7 +2,7 @@
 
 Ostinato is a planned autonomous robot that helps responders find and assess casualties in disaster areas where communication networks are down. It is designed to detect people, measure breathing from chest movement, check for a response to a spoken prompt, and report "unable to assess" when its data is not trustworthy. All processing is intended to run on the device.
 
-**Status:** early breathing detector for one person, tested on synthetic signals and video only. It has not been validated against counted breaths. It decides whether to report, wait, move, or get help. Navigation exists only in [simulation](docs/SIMULATION.md).
+**Status:** a desktop app measures one person's breathing from a webcam, asks for a hand raise, and decides whether to report, wait, move, or get help. Navigation exists only in [simulation](docs/SIMULATION.md). Tested mostly on synthetic signals and video; **accuracy on people has not been measured**.
 
 > Research prototype. Not a medical device, and not for use in real emergencies. No detected motion must never be reported as "not breathing" or "dead".
 
@@ -18,7 +18,7 @@ To serve the browser version locally, run `python -m http.server --bind 127.0.0.
 - A simulated robot that chooses where to look next
 - A ranked map explaining why each person was prioritized
 
-Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md).
+Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md) and the [demo guide](docs/DEMO.md).
 
 ## Setup
 
@@ -37,7 +37,7 @@ pytest
 ostinato
 ```
 
-Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and chest visible and some background on at least one side. Patterned clothing works best. The first reading takes at least 25 seconds. Before leaving a view or giving up, the app asks the person out loud to raise one hand, using the voice built into your computer, and watches for about 10 seconds. If nothing is seen, it tells you to reposition the camera and press M. Press V to ask at any time, or start with `--no-prompt` to ask only on V. A hand counts only if it was seen down, then held up after the request. A hand resting below the frame counts as down, but the raised wrist must be seen. It needs the head, both shoulders and that wrist in view, and cannot tell who raised a hand if people swap places. Not responding proves nothing. Press R to restart the assessment or Q to quit.
+Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and chest visible and some background on at least one side. Keep fans, curtains, and people out of the background. Patterned clothing works best. The first reading takes at least 25 seconds. Before leaving a view or giving up, the app asks the person out loud to raise one hand, using the voice built into your computer, and watches for about 10 seconds. If nothing is seen, it tells you to reposition the camera and press M. Press V to ask at any time, or start with `--no-prompt` to ask only on V. A hand counts only if it was seen down, then held up after the request. A hand resting below the frame counts as down, but the raised wrist must be seen. It needs the head, both shoulders and that wrist in view, and cannot tell who raised a hand if people swap places. Not responding proves nothing. Press R to restart the assessment or Q to quit.
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
