@@ -2,7 +2,7 @@
 
 Ostinato is a planned autonomous robot that helps responders find and assess casualties in disaster areas where communication networks are down. It is designed to detect people, measure breathing from chest movement, check for a response to a spoken prompt, and report "unable to assess" when its data is not trustworthy. All processing is intended to run on the device.
 
-**Status:** project setup. No detection or navigation features exist yet.
+**Status:** early breathing detector for one person, tested on synthetic signals and video only. It has not been validated against counted breaths. Navigation does not exist yet.
 
 > Research prototype. Not a medical device, and not for use in real emergencies. No detected motion must never be reported as "not breathing" or "dead".
 
@@ -16,13 +16,23 @@ Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md).
 
 ## Setup
 
-Requires Python 3.10 or newer.
+Requires Python 3.10, 3.11, or 3.12.
 
 ```bash
-python3 -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 ```
+
+## Run the breathing detector
+
+```bash
+ostinato
+```
+
+Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and chest visible and some background on at least one side. Patterned clothing works best. The first reading takes at least 25 seconds. Press Q to quit.
+
+Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
