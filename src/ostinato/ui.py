@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .breathing import MIN_SECONDS
-from .decision import Action
+from .decision import Action, Status
 
 W, H = 1080, 660
 VIDEO = (24, 120, 664, 600)  # x0, y0, x1, y1
@@ -46,6 +46,8 @@ def decision_text(decision):
     if decision.action is Action.GET_HELP:
         when = f"{decision.completed_at_s:.0f}s"
         return "GET HELP: a person must check", f"Past result at {when}: {decision.status.value} ({decision.reason})"
+    if decision.status is Status.RESPONDED:
+        return f"RESPONDED at {decision.completed_at_s:.0f}s: hand raised", "Breathing was not measured. Press R to measure it"
     if decision.action is Action.REPORT:
         result = decision.status.value if decision.bpm is None else f"{decision.bpm:.1f} breaths/min"
         return f"PAST RESULT at {decision.completed_at_s:.0f}s: {result}", f"{decision.reason.capitalize()}; press R to reassess"
