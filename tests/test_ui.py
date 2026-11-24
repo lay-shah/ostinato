@@ -210,3 +210,10 @@ def test_finished_rate_warns_when_no_longer_confirmed():
     check_fits(p)
     _, p = ui.compose(frame, monitor(OK), d)
     assert not any("Not confirmed" in t for t in texts(p))
+
+
+def test_very_long_note_is_cut_to_fit():
+    frame = np.zeros((480, 640, 3), np.uint8)
+    _, p = ui.compose(frame, monitor(), Assessor(0, 1).decision, note="Could not save: " + "long/path/" * 60)
+    check_fits(p)
+    assert any(t.startswith("Could not save") and t.endswith("…") for t in texts(p))

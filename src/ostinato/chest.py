@@ -41,6 +41,8 @@ class PoseFinder:
 
 def chest_box(points, shape):
     """Return (x0, y0, x1, y1, shoulder_width), or None if not usable."""
+    if not np.isfinite(points[:2]).all():
+        return None
     h, w = shape[:2]
     left, right = points[0], points[1]
     width = float(np.linalg.norm(left - right))
@@ -89,6 +91,8 @@ class ChestTracker:
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
         points = self.finder(bgr)
         box = chest_box(points, bgr.shape) if points is not None else None
+        if self._gray is not None and self._gray.shape != gray.shape:
+            self._gray = self._box = None  # the camera changed resolution
         prev_box = self._box
         value, reason = np.nan, "chest not visible"
         if box is not None and prev_box is not None:

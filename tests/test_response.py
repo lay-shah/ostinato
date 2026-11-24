@@ -275,3 +275,12 @@ def test_second_prompt_needs_a_second_raise():
         if check.update(t, Body((300, 200), 200, -1 if t < 5 else 0.8, None)):
             hits.append(t)
     assert len(hits) == 1 and check.outcome == "none seen"
+
+
+@pytest.mark.parametrize("index", [0, 11, 12, 15])
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_bad_landmarks_are_never_a_hand_position(index, value):
+    pts, vis = landmarks(-120)
+    pts[index] = value
+    body = body_from_landmarks(pts, vis, (640, 640))
+    assert body is None or body.left is None
