@@ -86,4 +86,6 @@ ostinato-sim scene 1001 --html medic.html
 
 Open `medic.html` in any browser. It works offline and shows only what the simulated robot knows.
 
+How the estimator decides, its benchmark, and its known weaknesses are in [ESTIMATOR.md](docs/ESTIMATOR.md).
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
