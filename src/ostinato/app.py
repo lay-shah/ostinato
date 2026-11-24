@@ -47,6 +47,28 @@ class Monitor:
         return self.reading
 
 
+def decision_text(decision):
+    """Return (headline, detail). The headline says what a person should do."""
+    if decision.action is Action.GET_HELP:
+        when = f" at {decision.completed_at_s:.0f}s"
+        return "GET HELP: a person must check", f"Past result{when}: {decision.status.value} ({decision.reason})"
+    if decision.action is Action.REPORT:
+        result = decision.status.value if decision.bpm is None else f"{decision.bpm:.1f} breaths/min"
+        return f"PAST RESULT at {decision.completed_at_s:.0f}s: {result}", f"{decision.reason}; R to reassess"
+    if decision.action is Action.MOVE:
+        return "MOVE the camera, then press M", decision.reason
+    return f"Decision: {decision.action.value}", decision.reason
+
+
+def put(frame, text, y, scale, color, thickness=1):
+    """Write one line, shrunk if needed to stay inside the frame."""
+    room = frame.shape[1] - 24
+    (width, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+    if width > room:
+        scale *= (room - 4) / width
+    cv2.putText(frame, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness)
+
+
 def draw(frame, monitor, decision):
     reading = monitor.reading
     if monitor.tracker.box:
@@ -58,15 +80,14 @@ def draw(frame, monitor, decision):
     else:
         text, color = f"Unable to assess: {reading.reason}", (0, 190, 255)
     h, w = frame.shape[:2]
-    cv2.rectangle(frame, (0, 0), (w, 96), (25, 25, 25), -1)
-    cv2.putText(frame, f"Live: {text}", (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    cv2.rectangle(frame, (0, 0), (w, 122), (25, 25, 25), -1)
+    put(frame, f"Live: {text}", 30, 0.7, color, 2)
     note = "Research prototype. Not a medical device. M: moved  R: restart  Q: quit"
-    plan = f"Decision: {decision.action.value} ({decision.reason})"
-    if decision.completed_at_s is not None:
-        result = decision.status.value if decision.bpm is None else f"{decision.bpm:.1f} breaths/min"
-        plan = f"Completed at {decision.completed_at_s:.1f}s: {result} ({decision.reason})"
-    cv2.putText(frame, plan, (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-    cv2.putText(frame, note, (12, 86), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+    headline, detail = decision_text(decision)
+    urgent = decision.action in (Action.GET_HELP, Action.MOVE)
+    put(frame, headline, 60, 0.65, (0, 190, 255) if urgent else (255, 255, 255), 2 if urgent else 1)
+    put(frame, detail, 86, 0.5, (255, 255, 255))
+    put(frame, note, 110, 0.5, (200, 200, 200))
     if len(monitor.samples) < 2:
         return
     t, y = map(np.array, zip(*monitor.samples))

@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from ostinato.app import Monitor, draw
+from ostinato.breathing import Reading
 from ostinato.chest import ChestTracker
 from ostinato.decision import Assessor
 
@@ -134,3 +135,105 @@ def test_paired_trial_from_synthetic_frames_to_decision(monkeypatch, tmp_path, c
     runs = json.loads(capsys.readouterr().out)["runs"]
     assert [event["action"] for event in runs[0]["events"]] == ["move", "report"]
     assert runs[0]["time_to_usable_s"] > runs[1]["time_to_usable_s"] > 0
+
+
+def test_trial_replay_matches_live_rules_through_brief_dropouts(monkeypatch):
+    """Tracking drops for part of every second, between would-be one-second samples."""
+    from types import SimpleNamespace
+
+    from ostinato import chest, viewpoints
+    from ostinato.decision import Action, Limits
+
+    fps = 12
+    clock = [0.0]
+    frames = []
+
+    def blocked(t):
+        return 0.4 < t % 1 < 0.8
+
+    class Camera:
+        def __init__(self, index):
+            pass
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            clock[0] += 1 / fps
+            frames.append((clock[0], scene(2 * np.sin(2 * np.pi * 16 / 60 * clock[0]))))
+            return True, frames[-1][1]
+
+        def release(self):
+            pass
+
+    class Pose:
+        def __call__(self, frame):
+            return None if blocked(clock[0]) else POINTS
+
+        def close(self):
+            pass
+
+    answers = iter(["", "8"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setattr(cv2, "VideoCapture", Camera)
+    monkeypatch.setattr(chest, "PoseFinder", Pose)
+    monkeypatch.setattr(viewpoints, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    # A clear estimate from 25 s isolates how dropouts affect confirmation.
+    monkeypatch.setattr(
+        "ostinato.app.estimate",
+        lambda t, x: Reading(16.0, 0.9, "ok") if t[-1] >= 25 else Reading(None, 0.0, "need more data"),
+    )
+    row = viewpoints.capture(0, "A")
+    reasons = [r[3] for r in row.trace]
+    assert len(row.trace) > 25 * fps and reasons.count("chest not visible") > 60
+    assert any(r[1] is not None for r in row.trace)
+
+    now = [0.0]
+    monitor = Monitor(ChestTracker(lambda f: None if blocked(now[0]) else POINTS))
+    live = Assessor(0, 1, Limits(view_seconds=viewpoints.WINDOW_SECONDS))
+    for t, frame in frames:
+        now[0] = t
+        if t < viewpoints.WINDOW_SECONDS:
+            assert live.update(t, monitor.update(frame, t)).bpm is None
+    other = viewpoints.Observation("B", 30, None, 0, "chest not visible", 8, row.trace)
+    run_a = viewpoints.replay([row, other])["runs"][0]
+    assert run_a["events"][0]["action"] == Action.MOVE.value
+    assert run_a["time_to_usable_s"] is None
+
+
+def test_screen_always_says_get_help_and_text_fits(monkeypatch):
+    from ostinato import app
+    from ostinato.decision import Action
+
+    for reason in ("chest not visible", "cannot check camera motion", "too much movement"):
+        a, t = Assessor(0, 0), 0
+        while not a.decision.final:
+            t += 1
+            a.update(t, Reading(None, 0.0, reason))
+        assert a.decision.action is Action.GET_HELP
+        seen = []
+        real = cv2.putText
+
+        def spy(img, text, org, font, scale, color, thickness, seen=seen, real=real):
+            seen.append((text, org[0] + cv2.getTextSize(text, font, scale, thickness)[0][0]))
+            return real(img, text, org, font, scale, color, thickness)
+
+        monkeypatch.setattr(app.cv2, "putText", spy)
+        m = Monitor(ChestTracker(lambda f: None))
+        m.reading = Reading(None, 0.0, reason)
+        for width in (640, 480):
+            draw(np.zeros((480, width, 3), np.uint8), m, a.decision)
+            assert all(end <= width for _, end in seen), seen
+            assert any(text.startswith("GET HELP") for text, _ in seen)
+            assert any(reason in text and "Past result" in text for text, _ in seen)
+            seen.clear()
+        monkeypatch.undo()
+
+
+def test_finished_rate_is_marked_as_past():
+    from ostinato.app import decision_text
+
+    a = Assessor(0, 1)
+    a.update(25, Reading(16.0, 0.9, "ok"))
+    headline, _ = decision_text(a.update(28, Reading(16.0, 0.9, "ok")))
+    assert headline == "PAST RESULT at 28s: 16.0 breaths/min"

@@ -46,9 +46,10 @@ pytest -q tests/test_chest.py::test_paired_trial_from_synthetic_frames_to_decisi
 For a physical trial, an observer counts breaths during two 30-second windows. Keep individual trial files local. See the [paired trial guide](docs/VIEWPOINT_TRIALS.md) for setup, accuracy scoring and replay assumptions.
 
 ```bash
-python -m ostinato.viewpoints trial pair-01.json --views front-1m angled-2m
-python -m ostinato.viewpoints report pair-01.json --tolerance-bpm 2
-python -m ostinato.viewpoints replay pair-01.json
+mkdir -p data  # ignored by git
+python -m ostinato.viewpoints trial data/pair-01.json --views front-1m angled-2m
+python -m ostinato.viewpoints report data/pair-01.json --tolerance-bpm 2
+python -m ostinato.viewpoints replay data/pair-01.json
 ```
 
 ## See the simulated medic view

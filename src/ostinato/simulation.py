@@ -346,7 +346,7 @@ def compare(seeds, cue="useful", progress=False):
                                           int((diff > 1e-6).sum())],
             "urgent_finished_s": round(float(np.mean(finish[k])), 1),
             "total_s": round(float(np.mean(total[k])), 1),
-            "mean_mission_time_to_usable_s": round(float(np.mean(usable_times[k])), 1) if usable_times[k] else None,
+            "mean_time_to_usable_measured_only_s": round(float(np.mean(usable_times[k])), 1) if usable_times[k] else None,
             "unassessed_fraction": round(1 - measured[k][0] / measured[k][1], 3),
             "mean_failed_observation_s_per_scene": round(failed_s[k] / len(total[k]), 1),
             "measured_fraction": round(measured[k][0] / measured[k][1], 3),
