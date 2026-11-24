@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, find_peaks, sosfiltfilt
 
 MIN_BPM = 6.0
 MAX_BPM = 42.0
@@ -20,6 +20,13 @@ FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for f
 FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
 MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
 MAX_HEAD_RATIO, MIN_HEAD_MATCH = 0.85, 0.7  # head motion, relative to the chest, that means rocking
+# Breath counting, used when the rhythm is too uneven for the spectrum alone.
+COUNT_CONFIDENCE = 0.6  # least spectral score
+COUNT_AGREEMENT = 2.0  # breaths/min between peaks, troughs, and the spectrum
+COUNT_TIMING = 0.2  # largest relative spread of breath lengths
+COUNT_LENGTHS = (0.6, 1.5)  # shortest and longest breath, relative to the typical one
+COUNT_DEPTH = 0.35  # largest relative spread of breath depths
+MIN_BREATHS = 4
 MAX_RATE_SPREAD = 4.0  # disagreement between window halves, breaths/min
 
 
@@ -121,6 +128,32 @@ def _rocks(signal: np.ndarray, head: np.ndarray) -> bool:
     return bool(abs(np.corrcoef(signal, head)[0, 1]) > MIN_HEAD_MATCH)
 
 
+def _count(x: np.ndarray, rate: float) -> float | None:
+    """Return breaths/min by counting, or None unless the breaths are alike."""
+    swing = np.percentile(x, 90) - np.percentile(x, 10)
+    peaks, found = find_peaks(x, prominence=0.35 * swing)
+    troughs, _ = find_peaks(-x, prominence=0.35 * swing)
+    rates = []
+    for marks in (peaks, troughs):
+        if len(marks) < MIN_BREATHS:
+            return None
+        lengths = np.diff(marks)
+        if lengths.std() > COUNT_TIMING * lengths.mean():
+            return None
+        rates.append(60 * FS / lengths.mean())
+    lengths, depths = np.diff(peaks), found["prominences"]
+    low, high = COUNT_LENGTHS
+    typical = np.median(lengths)
+    if lengths.min() < low * typical or lengths.max() > high * typical:
+        return None
+    if depths.std() > COUNT_DEPTH * depths.mean() or lengths.sum() < 0.7 * len(x):
+        return None
+    counted = sum(rates) / 2
+    if abs(rates[0] - rates[1]) > COUNT_AGREEMENT or abs(counted - rate) > COUNT_AGREEMENT:
+        return None
+    return float(counted)
+
+
 def estimate(times, values, background=None, head=None) -> Reading:
     """Estimate from timestamps (s) and displacement (shoulder widths).
 
@@ -177,7 +210,7 @@ def estimate(times, values, background=None, head=None) -> Reading:
     velocity = np.gradient(filtered, 1 / FS)
     v_rate, v_score = _peak(velocity)
     score = min(1.0, max(0.0, min(score, v_score)))
-    if score < MIN_CONFIDENCE:
+    if score < COUNT_CONFIDENCE:
         return _decline("signal not rhythmic enough", score)
     if abs(rate - v_rate) > MAX_RATE_SPREAD:
         return _decline("rate not stable", score)
@@ -193,6 +226,10 @@ def estimate(times, values, background=None, head=None) -> Reading:
     mid = len(filtered) // 2
     first, _ = _peak(velocity[:mid])
     second, _ = _peak(velocity[mid:])
-    if abs(first - second) > MAX_RATE_SPREAD:
-        return _decline("rate not stable", score)
-    return Reading(rate, score, "ok")
+    steady = abs(first - second) <= MAX_RATE_SPREAD
+    if score >= MIN_CONFIDENCE and steady:
+        return Reading(rate, score, "ok")
+    counted = _count(filtered, rate)
+    if counted is not None and MIN_BPM - LIMIT_TOLERANCE <= counted <= MAX_BPM + LIMIT_TOLERANCE:
+        return Reading(counted, score, "ok")
+    return _decline("rate not stable" if score >= MIN_CONFIDENCE else "signal not rhythmic enough", score)
