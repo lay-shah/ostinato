@@ -35,6 +35,22 @@ Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and che
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
+## Run the validation workflow
+
+Run the reproducible blocked-view demo with synthetic frames:
+
+```bash
+pytest -q tests/test_chest.py::test_paired_trial_from_synthetic_frames_to_decision
+```
+
+For a physical trial, an observer counts breaths during two 30-second windows. Keep individual trial files local. See the [paired trial guide](docs/VIEWPOINT_TRIALS.md) for setup, accuracy scoring and replay assumptions.
+
+```bash
+python -m ostinato.viewpoints trial pair-01.json --views front-1m angled-2m
+python -m ostinato.viewpoints report pair-01.json --tolerance-bpm 2
+python -m ostinato.viewpoints replay pair-01.json
+```
+
 ## See the simulated medic view
 
 ```bash
