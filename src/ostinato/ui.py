@@ -18,7 +18,7 @@ INK, DIM = (236, 242, 248), (179, 196, 212)
 GREEN, AMBER, BLUE = (116, 211, 150), (250, 178, 84), (128, 188, 250)
 
 HINTS = {
-    "chest not visible": "Face the camera with head and chest in view",
+    "chest not visible": "Sit back: show your head and chest",
     "not enough chest detail": "Try patterned clothing or more light",
     "cannot check camera motion": "Show some background beside the person",
     "camera moving": "Keep the camera still",

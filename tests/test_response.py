@@ -58,7 +58,7 @@ def test_raise_during_prompt_counts_once_it_ends():
         lambda t: 0.8 if t > 1 else -1,  # raised before being asked
         lambda t: 0.8 if 6 < t < 6.4 else -1,  # too brief
         lambda t: 0.8 if t > 6 and t % 0.5 < 0.3 else -1,  # shaking
-        lambda t: 0.15 if t > 6 else -1,  # not high enough
+        lambda t: 0.05 if t > 6 else -1,  # not high enough
         lambda t: (0.8 if t % 0.4 < 0.2 else None) if t > 6 else -1,  # hold not seen throughout
         lambda t: 0.8 if t > 9 else (None if t > 4 else -1),  # down only before a long gap
         lambda t: 0.8 if t > 14.5 else -1,  # after the window
@@ -105,7 +105,7 @@ def landmarks(wrist, rotate=0.0):
 
 @pytest.mark.parametrize("rotate", np.radians([0, 45, 90, 180, 270]))
 def test_height_is_the_same_lying_down(rotate):
-    b = body_from_landmarks(*landmarks(-120, rotate))
+    b = body_from_landmarks(*landmarks(-120, rotate), (640, 640))
     assert b.left == pytest.approx(1) and b.right == pytest.approx(-1)
 
 
@@ -113,10 +113,45 @@ def test_hidden_landmarks():
     for i in (0, 11, 12):
         pts, vis = landmarks(-120)
         vis[i] = 0.5
-        assert body_from_landmarks(pts, vis) is None
+        assert body_from_landmarks(pts, vis, (640, 640)) is None
     pts, vis = landmarks(-120)
     vis[15] = 0.5
-    assert body_from_landmarks(pts, vis).left is None
+    assert body_from_landmarks(pts, vis, (640, 640)).left is None
+
+
+def webcam(wrist, vis=0.97):
+    """Positions the pose model gave for a real seated webcam frame, 640 x 360."""
+    pts, v = np.zeros((33, 2)), np.ones(33)
+    pts[0], pts[11], pts[12] = (324, 148), (412, 252), (240, 240)
+    pts[15], pts[16] = (497, 500), wrist
+    v[15], v[16] = 0.29, vis
+    return body_from_landmarks(pts, v, (640, 360))
+
+
+def test_natural_webcam_raise_counts_and_resting_hand_is_down():
+    b = webcam((190, 194))
+    assert b.right > response.RAISED and b.left < response.LOWERED
+
+
+@pytest.mark.parametrize(
+    ("wrist", "vis"),
+    [((190, 194), 0.3), ((190, -20), 0.97), ((-20, 150), 0.97), ((190, 300), 0.3)],
+)
+def test_unseen_hand_is_neither_raised_nor_down(wrist, vis):
+    assert webcam(wrist, vis).right is None
+
+
+def test_hand_rising_from_below_the_frame_is_a_response():
+    check, hits = ResponseCheck(Quiet()), []
+    for i in range(150):
+        t = i / 15
+        if i == 30:
+            check.ask(t)
+        # Rising takes 0.6 s, during which motion blur hides the wrist.
+        body = webcam((190, 480), 0.2) if t < 5 else webcam((190, 250), 0.3) if t < 5.6 else webcam((190, 194))
+        if check.update(t, body):
+            hits.append(t)
+    assert len(hits) == 1 and 6.1 < hits[0] < 6.5
 
 
 def fake_command(monkeypatch, result):

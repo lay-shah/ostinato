@@ -13,12 +13,12 @@ import numpy as np
 
 PROMPT = "If you can hear me, please raise one hand."
 MIN_VISIBILITY = 0.7
-RAISED = 0.3  # wrist past the shoulder line toward the head, in shoulder widths
-LOWERED = 0.0
+RAISED = 0.1  # wrist past the shoulder line toward the head, in shoulder widths
+LOWERED = -0.2
 DOWN_SECONDS = 0.5  # a hand must first be seen down for this long
 HOLD_SECONDS = 0.6  # and then be held up for this long
 LISTEN_SECONDS = 10.0
-MAX_GAP = 0.5  # seconds without a view of the arm before its history is dropped
+MAX_GAP = 1.0  # seconds without a view of the arm before its history is dropped
 MAX_JUMP = 0.5  # body shift between frames, in shoulder widths: maybe someone else
 
 
@@ -32,8 +32,9 @@ class Body:
     right: float | None
 
 
-def body_from_landmarks(points, visibility):
+def body_from_landmarks(points, visibility, size):
     """`points` and `visibility` follow MediaPipe's 33 pose landmarks, in pixels.
+    `size` is the frame (width, height).
 
     Height is measured from the shoulders toward the nose, so it does not depend on
     the person being upright. Returns None if the direction cannot be measured.
@@ -52,9 +53,14 @@ def body_from_landmarks(points, visibility):
     up = up * math.copysign(1, toward_head)
 
     def height(i):
-        if visibility[i] < MIN_VISIBILITY:
-            return None
-        return float((np.asarray(points[i], float) - center) @ up) / width
+        x, y = points[i]
+        value = float((np.array([x, y], float) - center) @ up) / width
+        inside = 0 <= x < size[0] and 0 <= y < size[1]
+        if inside:
+            return value if visibility[i] >= MIN_VISIBILITY else None
+        # A resting hand is often just out of frame. The model's guess is enough to
+        # call it down, but a raised hand must really be seen.
+        return value if value <= LOWERED else None
 
     return Body((float(center[0]), float(center[1])), width, height(15), height(16))
 
@@ -211,4 +217,4 @@ class ResponseCheck:
         how = "Voice unavailable: showing text only" if self.speaker.failed else "Asked out loud"
         if self.state == "speaking":
             return f"ASKING: {PROMPT}", how if self.speaker.failed else "Speaking now"
-        return "WATCHING for a raised hand", f"{how}. Show one wrist below your shoulder, then raise it and hold."
+        return "WATCHING for a raised hand", f"{how}. Start with hands down, then raise one and hold."
