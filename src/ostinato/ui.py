@@ -74,10 +74,12 @@ class _Painter:
         self.boxes = []  # every text box drawn, for tests
 
     def text(self, x, y, text, size, color, room, bold=False):
-        """One line, shrunk if needed to stay inside `room` pixels."""
+        """One line, shrunk and then cut if needed to stay inside `room` pixels."""
         stroke = 1 if bold else 0
         while size > 9 and self.d.textlength(text, font(size)) + 2 * stroke > room:
             size -= 1
+        while len(text) > 1 and self.d.textlength(text, font(size)) + 2 * stroke > room:
+            text = text.rstrip("…")[:-1] + "…" if len(text) > 2 else text[:-1]
         self.d.text((x, y), text, font=font(size), fill=color, stroke_width=stroke, stroke_fill=color)
         box = self.d.textbbox((x, y), text, font=font(size), stroke_width=stroke)
         self.boxes.append((text, box, x + room))

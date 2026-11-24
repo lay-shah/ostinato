@@ -250,3 +250,13 @@ def test_rocking_moves_the_head_as_much_as_the_chest(head_px, measured):
         assert monitor.reading.bpm == pytest.approx(16, abs=1)
     else:
         assert monitor.reading.bpm is None and monitor.reading.reason == "whole body moving"
+
+
+def test_resolution_change_and_bad_landmarks_do_not_crash():
+    sizes = [(480, 640), (480, 640), (333, 501), (333, 501), (720, 1280), (480, 640)]
+    tracker = ChestTracker(lambda f: POINTS * [f.shape[1] / 640, f.shape[0] / 480])
+    for h, w in sizes:
+        tracker.update(np.full((h, w, 3), 90, np.uint8))
+    for value in (np.nan, np.inf, -np.inf):
+        tracker = ChestTracker(lambda f, v=value: POINTS * v)
+        assert tracker.update(scene(0))[1] == "chest not visible"

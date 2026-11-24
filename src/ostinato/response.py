@@ -39,12 +39,12 @@ def body_from_landmarks(points, visibility, size):
     Height is measured from the shoulders toward the nose, so it does not depend on
     the person being upright. Returns None if the direction cannot be measured.
     """
-    if min(visibility[i] for i in (0, 11, 12)) < MIN_VISIBILITY:
+    if not min(visibility[i] for i in (0, 11, 12)) >= MIN_VISIBILITY:
         return None
     nose, left, right = (np.asarray(points[i], float) for i in (0, 11, 12))
     center, across = (left + right) / 2, left - right
     width = float(np.linalg.norm(across))
-    if width < 60:
+    if not (width >= 60 and np.isfinite([*nose, *center]).all()):
         return None
     up = np.array([-across[1], across[0]]) / width
     toward_head = float((nose - center) @ up)
@@ -54,6 +54,8 @@ def body_from_landmarks(points, visibility, size):
 
     def height(i):
         x, y = points[i]
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return None
         value = float((np.array([x, y], float) - center) @ up) / width
         inside = 0 <= x < size[0] and 0 <= y < size[1]
         if inside:

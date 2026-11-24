@@ -140,10 +140,12 @@ def main(argv=None):
                 check.ask(t)
             elif key == ord("s"):
                 try:
-                    note = f"Saved {save(recorder, args.reports)}"
+                    path = save(recorder, args.reports)
+                    note = f"Saved {path.name}"
+                    print(f"Saved {path}", flush=True)
                 except (OSError, ValueError) as error:
                     note = f"Could not save: {error}"
-                print(note, flush=True)
+                    print(note, flush=True)
                 note_until = t + 5
             elif (key == ord("m") and decision.action is Action.MOVE) or (demo and demo.step(t, decision)):
                 monitor.reset()
