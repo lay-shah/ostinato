@@ -7,7 +7,7 @@ Everything here is synthetic. It shows how the estimator behaves on motion we ma
 1. At least 25 s of chest motion, tracked in at least 80% of frames, with no gap over 1 s.
 2. Enough motion, with no lurch that dwarfs it.
 3. The signal must not mirror the background. A curtain or fan is otherwise subtracted as camera motion and looks like breathing.
-4. The head must not move with the chest by about as much. That is rocking. This check needs an upright person with a visible head.
+4. The head must not move with the chest by about as much. That is rocking. This check needs a visible head.
 5. Displacement and velocity must agree on a rate between 6 and 42 breaths/min, and the signal must repeat itself one breath later.
 6. Motion must not fade for about a breath anywhere in the window, so an old rate does not linger.
 7. Either the rhythm is very clear and steady, or at least four breaths can be counted from both peaks and troughs, with similar length and depth, and agree with the spectrum.
@@ -43,7 +43,24 @@ Errors are in breaths/min and cover only windows given a rate. Each is a single 
 
 These are the shares of windows that still showed a rate.
 
+## Lying down
+
+When the torso is tilted 40 degrees or more in the image, the chest, head, and background regions turn with it. Only motion up and down the image is measured. That suits a level camera looking from the side, because the chest rises away from the ground. Straight overhead, the chest mostly moves toward the camera and is likely to be declined.
+
+On 24 synthetic clips per row, with the torso at 50-180 degrees:
+
+| Clip | Given a rate before | Now |
+|---|---:|---:|
+| Breathing, lying | 7 | 24 |
+| Breathing, upright | 24 | 24 |
+| Rocking (false rate) | 7 | 0 |
+| Still, moving background, or moving arm (false rate) | 0 | 0 |
+
+These are drawn textures with given landmarks. Nobody lying down has been measured.
+
 ## Known weaknesses
+
+- Raising a hand toward the ceiling while lying down may not count as a response.
 
 - Motion that rises and falls regularly within the breathing band can pass, such as steady sway or wind on clothing.
 - Irregular breathing is almost always declined.
