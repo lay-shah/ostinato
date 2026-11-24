@@ -81,10 +81,10 @@ ostinato-accuracy data/pair-*.json --html data/accuracy.html
 ## See the simulated medic view
 
 ```bash
-ostinato-sim scene 1001 --html medic.html
+ostinato-sim scene 1001 --html data/medic.html
 ```
 
-Open `medic.html` in any browser. It works offline and shows only what the simulated robot knows.
+Open `data/medic.html` in any browser. It works offline and shows only what the simulated robot knows.
 
 How the estimator decides, its benchmark, and its known weaknesses are in [ESTIMATOR.md](docs/ESTIMATOR.md).
 

@@ -226,6 +226,8 @@ def main(argv=None):
         else:
             if len(set(args.views)) != 2 or args.output.exists():
                 parser.error("provide two distinct views and a new output file")
+            # Before recording, so a missing folder cannot cost a finished trial.
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             pair = [capture(args.camera, view) for view in args.views]
             data = {"source": "paired-webcam-v3", "observations": [asdict(row) for row in pair]}
             with args.output.open("x") as output:

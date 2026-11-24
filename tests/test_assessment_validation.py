@@ -63,3 +63,17 @@ def test_only_per_frame_trials_can_be_replayed(tmp_path):
         replay(old)
     new = load_pair(_pair_file(tmp_path, "paired-webcam-v3", trace))
     assert replay(new)["runs"][0]["time_to_usable_s"] == 28
+
+
+def test_trial_folder_is_ready_before_recording(tmp_path, monkeypatch, capsys):
+    from ostinato import viewpoints
+
+    out = tmp_path / "missing" / "pair.json"
+
+    def capture(camera, view):
+        assert out.parent.is_dir()
+        return Observation(view, 30, 16, 0.9, "ok", 8)
+
+    monkeypatch.setattr(viewpoints, "capture", capture)
+    viewpoints.main(["trial", str(out), "--views", "A", "B"])
+    assert out.exists() and "coverage" in capsys.readouterr().out
