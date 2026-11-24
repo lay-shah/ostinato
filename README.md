@@ -35,4 +35,12 @@ Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and che
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
+## See the simulated medic view
+
+```bash
+ostinato-sim scene 1001 --html medic.html
+```
+
+Open `medic.html` in any browser. It works offline and shows only what the simulated robot knows.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
