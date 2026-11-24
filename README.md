@@ -8,7 +8,9 @@ Ostinato is a planned autonomous robot that helps responders find and assess cas
 
 ## Explore Ostinato
 
-[Open the interactive signal demo](https://sahilnpatel.github.io/ostinato/) or [read the project report](https://sahilnpatel.github.io/ostinato/PROJECT_REPORT.html). The public demo uses synthetic inputs and runs in the browser. For an offline copy, open `docs/index.html` and keep `docs/PROJECT_REPORT.html` alongside it. The Python application below runs the actual webcam assessment.
+[Run the live camera assessment](https://sahilnpatel.github.io/ostinato/live.html), [try the synthetic signal demo](https://sahilnpatel.github.io/ostinato/), or [read the project report](https://sahilnpatel.github.io/ostinato/PROJECT_REPORT.html). The live browser page downloads its runtime and pose model on first use. It processes frames on your device using the Python chest tracker, breathing estimator, assessment and hand-response logic. The desktop app below can also run offline after installation.
+
+To serve the browser version locally, run `python -m http.server --bind 127.0.0.1 --directory docs 8000` and open `http://localhost:8000/live.html`. After changing the Python core, refresh the browser bundle with `python docs/build_web_core.py`.
 
 ## First prototype
 
