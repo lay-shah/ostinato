@@ -12,7 +12,7 @@ A robot moving at 1 m/s searches a 20 x 20 m map with walls and 4 to 7 people. I
 
 Both policies only consider views the map shows as unobstructed. "Nearest" picks the closest person or view. "Ranked" trades the cue against travel time; "predicted" trades the estimated chest direction against it.
 
-This complements the viewpoint trials on the `feature/viewpoint-trials` branch, which study two views of one person and real paired webcam measurements.
+This complements the [paired viewpoint trials](VIEWPOINT_TRIALS.md), which study two views of one person and real paired webcam measurements.
 
 ## Result, seeds 0-99
 
