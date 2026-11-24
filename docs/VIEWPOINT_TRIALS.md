@@ -38,3 +38,17 @@ An observer counts breaths between each START and STOP and enters the count befo
 Record reported windows divided by all windows (coverage), mean absolute error over reported windows, the number of first-view declines and how often a second view returned a rate. Inspect recovered readings against their own manual references before calling them accurate. A hand count is a practical reference with its own uncertainty: one extra count over 30 seconds changes the reference by 2 breaths/min.
 
 Use the results to decide the next build. If changing position repeatedly produces a usable and accurate estimate, collect more varied scenes and test viewpoint selection on held-out trials. If it does not, inspect tracking and signal quality before building a mobile platform. Revisit the decision with a responder using a past incident and ask which observation would have changed their next action.
+
+## Score recovered readings and replay the decision
+
+New paired trials save version 2 summaries with elapsed times, rates, signal scores and decline reasons. The report still accepts version 1 summaries. Set an explicit experimental error tolerance to count recoveries within that distance of the independent manual rate. The default of 2 breaths/min corresponds to one counted breath in a 30-second window. It is a reporting choice without clinical validation.
+
+```sh
+python -m ostinato.viewpoints report pair-01.json --tolerance-bpm 2
+python -m ostinato.viewpoints replay pair-01.json
+ostinato-sim compare --scenes 10
+```
+
+Replay feeds the timed samples through the same per-person assessor in recorded and reversed order. Both policies get 30 seconds per view and zero modeled travel time. Results describe an offline counterfactual using the two recorded windows. A legacy summary contains too little evidence to replay confirmation. Replay never substitutes the manual count for an estimator reading.
+
+The simulation comparison reports mission time to a usable result averaged over people who received a rate, the unassessed fraction over all people, and time spent observing at failed views averaged over scenes. Unreachable people count as unassessed with zero observation time. Travel is excluded from failed observation time. In the live app, a completed decision displays its session timestamp separately from the current camera evidence.
