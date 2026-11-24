@@ -232,3 +232,21 @@ def test_background_is_kept_in_step_with_samples():
     assert len(m.background) == len(m.samples)
     m.reset()
     assert not m.background
+
+
+HEAD = np.zeros((480, 640), np.uint8)
+HEAD[10:130, 265:375] = 1
+FACE = texture(5, 480, 640)
+
+
+@pytest.mark.parametrize(("head_px", "measured"), [(0.0, True), (1.2, True), (2.4, False)])
+def test_rocking_moves_the_head_as_much_as_the_chest(head_px, measured):
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    for i in range(28 * 15):
+        wave = np.sin(2 * np.pi * 16 / 60 * i / 15)
+        frame = np.where(HEAD[..., None] == 1, shift(FACE, 0, head_px * wave), scene(2 * wave))
+        monitor.update(frame, i / 15)
+    if measured:
+        assert monitor.reading.bpm == pytest.approx(16, abs=1)
+    else:
+        assert monitor.reading.bpm is None and monitor.reading.reason == "whole body moving"
