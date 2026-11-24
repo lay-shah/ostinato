@@ -26,9 +26,10 @@ These outcomes are assigned fixtures for checking the decision logic. The simula
 Install the existing project dependencies using the repository README. Use a consenting healthy teammate and a separate observer. Mark two positions with measured distances. Keep the person, lighting and camera settings consistent. For repeated pairs, alternate the starting position and include a partially obscured condition. Follow the data-collection rules in [the project plan](PLAN.md).
 
 ```sh
-python -m ostinato.viewpoints trial pair-01.json --views front-1m angled-2m
-python -m ostinato.viewpoints trial pair-02.json --views angled-2m front-1m
-python -m ostinato.viewpoints report pair-01.json pair-02.json
+mkdir -p data  # ignored by git
+python -m ostinato.viewpoints trial data/pair-01.json --views front-1m angled-2m
+python -m ostinato.viewpoints trial data/pair-02.json --views angled-2m front-1m
+python -m ostinato.viewpoints report data/pair-01.json data/pair-02.json
 ```
 
 An observer counts breaths between each START and STOP and enters the count before seeing the estimate. Each view starts with a fresh tracker and has its own reference count. Use anonymous view labels. The command saves timestamps as elapsed durations, counts, estimated rates, signal scores and decline reasons. It never writes images or video. A completed pair needs two uninterrupted windows. Keep trial files local unless participants agreed to sharing.
@@ -41,14 +42,14 @@ Use the results to decide the next build. If changing position repeatedly produc
 
 ## Score recovered readings and replay the decision
 
-New paired trials save version 2 summaries with elapsed times, rates, signal scores and decline reasons. The report still accepts version 1 summaries. Set an explicit experimental error tolerance to count recoveries within that distance of the independent manual rate. The default of 2 breaths/min corresponds to one counted breath in a 30-second window. It is a reporting choice without clinical validation.
+New paired trials save version 3 files with the live monitor's reading for every frame. The report still accepts versions 1 and 2. Version 2 sampled about once a second and could miss tracking dropouts, so it cannot be replayed. Set an explicit experimental error tolerance to count recoveries within that distance of the independent manual rate. The default of 2 breaths/min corresponds to one counted breath in a 30-second window. It is a reporting choice without clinical validation.
 
 ```sh
-python -m ostinato.viewpoints report pair-01.json --tolerance-bpm 2
-python -m ostinato.viewpoints replay pair-01.json
+python -m ostinato.viewpoints report data/pair-01.json --tolerance-bpm 2
+python -m ostinato.viewpoints replay data/pair-01.json
 ostinato-sim compare --scenes 10
 ```
 
-Replay feeds the timed samples through the same per-person assessor in recorded and reversed order. Both policies get 30 seconds per view and zero modeled travel time. Results describe an offline counterfactual using the two recorded windows. A legacy summary contains too little evidence to replay confirmation. Replay never substitutes the manual count for an estimator reading.
+Replay feeds the timed samples through the same per-person assessor in recorded and reversed order. Both policies get 30 seconds per view and zero modeled travel time. Results describe an offline counterfactual using the two recorded windows. Older files contain too little evidence to replay confirmation. Replay never substitutes the manual count for an estimator reading.
 
-The simulation comparison reports mission time to a usable result averaged over people who received a rate, the unassessed fraction over all people, and time spent observing at failed views averaged over scenes. Unreachable people count as unassessed with zero observation time. Travel is excluded from failed observation time. In the live app, a completed decision displays its session timestamp separately from the current camera evidence.
+The simulation comparison reports mission time to a usable result averaged over people who received a rate, the unassessed fraction over all people, and time spent observing at failed views averaged over scenes. Unreachable people count as unassessed with zero observation time. Travel is excluded from failed observation time. Read the measured-only time beside the unassessed fraction: skipping hard cases can lower it. In the live app, a completed decision is labeled as a past result with its session timestamp, separate from the live camera evidence.

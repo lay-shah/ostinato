@@ -4,7 +4,7 @@ import argparse
 import json
 import math
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from itertools import pairwise
 from pathlib import Path
 from statistics import mean
@@ -56,6 +56,7 @@ def summarize(pairs, tolerance_bpm=2.0):
 def capture(camera, view):
     import cv2
 
+    from .app import Monitor
     from .breathing import estimate
     from .chest import ChestTracker, PoseFinder
 
@@ -66,7 +67,9 @@ def capture(camera, view):
         if not cap.isOpened():
             raise ValueError("Camera unavailable")
         finder = PoseFinder()
-        tracker = ChestTracker(finder)
+        # The same monitor as the live app, recorded on every frame, so replay
+        # sees each tracking dropout that would have restarted confirmation.
+        monitor = Monitor(ChestTracker(finder))
         times, motion, trace = [], [], []
         print("START counting now", flush=True)
         start = time.monotonic()
@@ -80,15 +83,10 @@ def capture(camera, view):
             if frame.shape[1] > 640:
                 scale = 640 / frame.shape[1]
                 frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            value, reason = tracker.update(frame)
+            r = monitor.update(frame, elapsed)
             times.append(elapsed)
-            motion.append(value)
-            if not trace or elapsed - trace[-1][0] >= 1.0:
-                if math.isfinite(value):
-                    r = estimate(times, motion)
-                    trace.append((elapsed, r.bpm, r.confidence, r.reason))
-                else:
-                    trace.append((elapsed, None, 0.0, reason))
+            motion.append(monitor.samples[-1][1])
+            trace.append((elapsed, r.bpm, r.confidence, r.reason))
         elapsed = time.monotonic() - start
         print("STOP counting", flush=True)
     finally:
@@ -101,7 +99,7 @@ def capture(camera, view):
     if not times or max(b - a for a, b in pairwise(edges)) > 1:
         raise ValueError("Camera timing interrupted; repeat the trial")
     reading = estimate(times, motion)
-    trace.append((elapsed, reading.bpm, reading.confidence, reading.reason))
+    trace.append((elapsed, r.bpm, r.confidence, r.reason))
     while True:
         raw = input("Observer's breath count for this window: ").strip()
         if raw.isascii() and raw.isdigit():
@@ -149,7 +147,7 @@ def demo():
 
 def load_pair(path):
     data = json.loads(path.read_text())
-    if data["source"] not in ("paired-webcam-v1", "paired-webcam-v2"):
+    if data["source"] not in ("paired-webcam-v1", "paired-webcam-v2", "paired-webcam-v3"):
         raise ValueError(f"{path}: expected a paired webcam trial")
     pair = [Observation(**row) for row in data["observations"]]
     if len(pair) != 2 or len({row.view for row in pair}) != 2:
@@ -167,6 +165,9 @@ def load_pair(path):
                     and (bpm is None or math.isfinite(bpm)) and isinstance(reason, str)):
                 raise ValueError(f"{path}: invalid sample in replay trace")
             previous = t
+    if data["source"] != "paired-webcam-v3":
+        # v2 sampled about once a second and can miss dropouts, so it cannot be replayed.
+        pair = [replace(row, trace=()) for row in pair]
     return pair
 
 
@@ -176,7 +177,7 @@ def replay(pair):
     from .decision import Action, Assessor, Limits
 
     if any(not view.trace for view in pair):
-        raise ValueError("Replay needs timed readings from a v2 trial; v1 supports report only")
+        raise ValueError("Replay needs timed readings from a v3 trial; v1 and v2 support report only")
     runs = []
     for order in (pair, pair[::-1]):
         assessor = Assessor(0, 1, Limits(view_seconds=WINDOW_SECONDS))
@@ -226,7 +227,7 @@ def main(argv=None):
             if len(set(args.views)) != 2 or args.output.exists():
                 parser.error("provide two distinct views and a new output file")
             pair = [capture(args.camera, view) for view in args.views]
-            data = {"source": "paired-webcam-v2", "observations": [asdict(row) for row in pair]}
+            data = {"source": "paired-webcam-v3", "observations": [asdict(row) for row in pair]}
             with args.output.open("x") as output:
                 json.dump(data, output, indent=2, allow_nan=False)
             result = summarize([pair])
