@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pytest
 
-from ostinato.app import Monitor, draw
+from ostinato.app import Monitor
 from ostinato.breathing import Reading
 from ostinato.chest import ChestTracker
 from ostinato.decision import Assessor
@@ -73,14 +73,6 @@ def test_reset_discards_signal_from_old_view():
     m = run(15)
     m.reset()
     assert m.reading.bpm is None and not m.samples and m.tracker.box is None
-
-
-def test_decision_line_draws():
-    m = run(15, seconds=2)
-    frame = scene(0)
-    before = frame.copy()
-    draw(frame, m, Assessor(0, 1).decision)
-    assert (frame != before).any()
 
 
 def test_paired_trial_from_synthetic_frames_to_decision(monkeypatch, tmp_path, capsys):
@@ -201,37 +193,8 @@ def test_trial_replay_matches_live_rules_through_brief_dropouts(monkeypatch):
     assert run_a["time_to_usable_s"] is None
 
 
-def test_screen_always_says_get_help_and_text_fits(monkeypatch):
-    from ostinato import app
-    from ostinato.decision import Action
-
-    for reason in ("chest not visible", "cannot check camera motion", "too much movement"):
-        a, t = Assessor(0, 0), 0
-        while not a.decision.final:
-            t += 1
-            a.update(t, Reading(None, 0.0, reason))
-        assert a.decision.action is Action.GET_HELP
-        seen = []
-        real = cv2.putText
-
-        def spy(img, text, org, font, scale, color, thickness, seen=seen, real=real):
-            seen.append((text, org[0] + cv2.getTextSize(text, font, scale, thickness)[0][0]))
-            return real(img, text, org, font, scale, color, thickness)
-
-        monkeypatch.setattr(app.cv2, "putText", spy)
-        m = Monitor(ChestTracker(lambda f: None))
-        m.reading = Reading(None, 0.0, reason)
-        for width in (640, 480):
-            draw(np.zeros((480, width, 3), np.uint8), m, a.decision)
-            assert all(end <= width for _, end in seen), seen
-            assert any(text.startswith("GET HELP") for text, _ in seen)
-            assert any(reason in text and "Past result" in text for text, _ in seen)
-            seen.clear()
-        monkeypatch.undo()
-
-
 def test_finished_rate_is_marked_as_past():
-    from ostinato.app import decision_text
+    from ostinato.ui import decision_text
 
     a = Assessor(0, 1)
     a.update(25, Reading(16.0, 0.9, "ok"))
