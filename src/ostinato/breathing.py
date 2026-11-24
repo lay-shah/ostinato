@@ -19,6 +19,7 @@ MIN_RMS = 2e-4  # smallest usable motion, in shoulder widths
 FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for faded motion
 FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
 MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
+MAX_HEAD_RATIO, MIN_HEAD_MATCH = 0.85, 0.7  # head motion, relative to the chest, that means rocking
 MAX_RATE_SPREAD = 4.0  # disagreement between window halves, breaths/min
 
 
@@ -110,11 +111,22 @@ def _mirrors(signal: np.ndarray, background: np.ndarray) -> bool:
     return bool(np.corrcoef(signal, background)[0, 1] < -MAX_MIRRORING)
 
 
-def estimate(times, values, background=None) -> Reading:
+def _rocks(signal: np.ndarray, head: np.ndarray) -> bool:
+    """True if the head moves with the chest, and about as much.
+
+    Breathing moves the chest more than the head. Rocking moves both.
+    """
+    if np.std(head) < MAX_HEAD_RATIO * np.std(signal):
+        return False
+    return bool(abs(np.corrcoef(signal, head)[0, 1]) > MIN_HEAD_MATCH)
+
+
+def estimate(times, values, background=None, head=None) -> Reading:
     """Estimate from timestamps (s) and displacement (shoulder widths).
 
     Use NaN for frames in which the chest could not be tracked. `background` is the
-    background displacement already subtracted from `values`, if known.
+    background displacement already subtracted from `values`, and `head` the
+    head displacement on the same scale, if known.
     """
     t = np.asarray(times, float)
     x = np.asarray(values, float)
@@ -137,9 +149,11 @@ def estimate(times, values, background=None) -> Reading:
     y = np.interp(grid, tg, xg)
     y = y - np.polyval(np.polyfit(grid - grid[0], y, 1), grid - grid[0])
 
-    b = None
-    if background is not None:
-        b = np.interp(grid, tg, np.asarray(background, float)[good])
+    def companion(series):
+        if series is None:
+            return None
+        values_there = np.interp(grid, tg, np.asarray(series, float)[good])
+        return sosfiltfilt(sos, values_there - values_there.mean())
 
     sos = butter(2, [SEARCH_BPM[0] / 60 * 0.8, SEARCH_BPM[1] / 60 * 1.2], "bandpass", fs=FS, output="sos")
     filtered = sosfiltfilt(sos, y)
@@ -150,8 +164,11 @@ def estimate(times, values, background=None) -> Reading:
     if np.abs(filtered).max() > 5 * np.median(np.abs(filtered)) + 1e-12:
         return _decline("too much movement")
 
-    if b is not None and _mirrors(filtered, sosfiltfilt(sos, b - b.mean())):
+    behind, above = companion(background), companion(head)
+    if behind is not None and _mirrors(filtered, behind):
         return _decline("background moving")
+    if above is not None and _rocks(filtered, above):
+        return _decline("whole body moving")
 
     # Accumulated tracking error is a random walk, whose low-frequency power can
     # imitate slow breathing. Its velocity has a flat spectrum, so require a

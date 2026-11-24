@@ -43,6 +43,7 @@ class Monitor:
         self.tracker = tracker
         self.samples = deque()
         self.background = deque()
+        self.head = deque()
         self.reading = Reading(None, 0.0, "need more data")
         self.tracking = "starting"
         self._last_estimate = -np.inf
@@ -50,6 +51,7 @@ class Monitor:
     def reset(self, reason="need more data"):
         self.samples.clear()
         self.background.clear()
+        self.head.clear()
         self.tracker.reset()
         self.reading = Reading(None, 0.0, reason)
         self._last_estimate = -np.inf
@@ -60,15 +62,17 @@ class Monitor:
         value, self.tracking = self.tracker.update(frame)
         self.samples.append((t, value))
         self.background.append(self.tracker.background)
+        self.head.append(self.tracker.head)
         while t - self.samples[0][0] > WINDOW:
             self.samples.popleft()
             self.background.popleft()
+            self.head.popleft()
         # Never keep showing an old rate once tracking is lost.
         if not np.isfinite(value):
             self.reading = Reading(None, 0.0, self.tracking)
         elif t - self._last_estimate >= 1.0 or self.reading.reason == self.tracking:
             self._last_estimate = t
-            self.reading = estimate(*zip(*self.samples), self.background)
+            self.reading = estimate(*zip(*self.samples), self.background, self.head)
         return self.reading
 
 

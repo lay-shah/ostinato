@@ -66,6 +66,7 @@ class ChestTracker:
         self._gray = None
         self._box = None
         self.position = 0.0
+        self.head = 0.0  # head motion on the same scale, while it can be seen
         self.background = 0.0  # vertical motion subtracted so far
         self.box = None
 
@@ -120,4 +121,14 @@ class ChestTracker:
             return np.nan, "too much movement"
         self.position += float(step[1])
         self.background += float(camera[1]) / width
+
+        # Just above the shoulders, which is the head when the person is upright.
+        cx, top = (x0 + x1) // 2, int(y0 - 0.05 * width)
+        hy0, hy1 = max(0, int(top - 0.75 * width)), max(0, int(top - 0.3 * width))
+        hx0, hx1 = max(0, int(cx - 0.2 * width)), int(cx + 0.2 * width)
+        mask = np.zeros_like(gray)
+        mask[hy0:hy1, hx0:hx1] = 255
+        head = self._median_flow(gray, mask)
+        if head is not None:
+            self.head += float(head[1] - camera[1]) / width
         return self.position, "ok"
