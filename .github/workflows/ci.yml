@@ -16,3 +16,14 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/*.cjs
+      - name: Stage the tested browser release
+        run: python tools/build_site.py "${{ runner.temp }}/ostinato-site"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ostinato-site
+          path: ${{ runner.temp }}/ostinato-site/
+          if-no-files-found: error

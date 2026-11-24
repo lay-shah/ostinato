@@ -4,10 +4,10 @@ Use this prototype to study camera measurements and viewpoint selection. A decli
 
 ## Run the simulation
 
-From the project root, run:
+After [desktop setup](../README.md#setup), run from the project root:
 
 ```sh
-PYTHONPATH=src python -m ostinato.viewpoints simulate
+python -m ostinato.viewpoints simulate
 ```
 
 Both policies start at position zero, travel at one coordinate unit per second, and spend 30 seconds observing at each of two marked locations. Nearest-first chooses by travel time. Visibility-first prefers a geometrically unobstructed view, breaking ties by travel time. Each policy sees only geometry before it moves. On a declined observation it tries the remaining view once. Each event records the viewpoint, elapsed time and reason. A null time to reading means both attempts failed.
@@ -23,7 +23,12 @@ These outcomes are assigned fixtures for checking the decision logic. The simula
 
 ## Run a paired webcam trial
 
-Install the existing project dependencies using the repository README. Use a consenting healthy teammate and a separate observer. Mark two positions with measured distances. Keep the person, lighting and camera settings consistent. For repeated pairs, alternate the starting position and include a partially obscured condition. Follow the data-collection rules in [the project plan](PLAN.md).
+Follow the [desktop setup](../README.md#setup) first. This workflow opens the camera from the desktop Python app. If your system asks for permission, allow camera access for the terminal or Python. Add `--camera 1` if the intended camera is device 1.
+
+1. Recruit a consenting healthy volunteer and a separate observer. Follow the data-collection rules in [the project plan](PLAN.md).
+2. Mark two camera positions and measure their distances from the volunteer. Start with a clear front view at 1 m and a clear angled view at 2 m. Keep the volunteer seated and the camera fixed during each window. Frame the head, both shoulders, chest, and some stationary background. Keep lighting and camera settings consistent.
+3. Agree on a counting rule before starting. For example, count each inhalation that starts between START and STOP once and ask the volunteer to breathe normally. Seat the observer where they can see or hear breaths independently of the webcam and shield them from the estimate.
+4. Run the trial commands. At each view, follow the terminal prompts, allow the framing check, count for the marked window, and enter the whole-number count. Repeat both views if the capture is interrupted. For repeated pairs, swap the order and include a partially obscured condition. Keep completed pairs even when both windows are declined.
 
 ```sh
 mkdir -p data  # ignored by git
@@ -34,11 +39,11 @@ python -m ostinato.viewpoints report data/pair-01.json data/pair-02.json
 
 Before each window the program spends up to 8 seconds saying whether it can track the chest. This is advice only and every view is recorded, so difficult views are not dropped.
 
-An observer counts breaths between each START and STOP and enters the count before seeing the estimate. Each view starts with a fresh tracker and has its own reference count. Use anonymous view labels. The command saves timestamps as elapsed durations, counts, estimated rates, signal scores and decline reasons. It never writes images or video. A completed pair needs two uninterrupted windows. Keep trial files local unless participants agreed to sharing.
+Each view starts with a fresh tracker and has its own reference count. Use anonymous view labels. The command saves elapsed times, counts, estimated rates, signal scores, decline reasons, and the timing of per-frame readings. It does not write images or video. A completed pair needs two uninterrupted windows. Keep trial files local unless participants agreed to sharing.
 
 ## Read the report
 
-Record reported windows divided by all windows (coverage), mean absolute error over reported windows, the number of first-view declines and how often a second view returned a rate. Inspect recovered readings against their own manual references before calling them accurate. A hand count is a practical reference with its own uncertainty: one extra count over 30 seconds changes the reference by 2 breaths/min.
+Record reported windows divided by all windows (coverage), mean absolute error over reported windows, the number of first-view declines and how often a second view returned a rate. Inspect recovered readings against their own manual references before calling them accurate. The reference is the count multiplied by 60 and divided by the recorded window duration in seconds. One extra count in 30 seconds changes it by 2 breaths/min. Run `ostinato-accuracy data/pair-*.json --html data/accuracy.html` to also report signed bias and limits of agreement across measured windows. For a small sample or repeated windows from the same volunteer, treat these figures as descriptive.
 
 Use the results to decide the next build. If changing position repeatedly produces a usable and accurate estimate, collect more varied scenes and test viewpoint selection on held-out trials. If it does not, inspect tracking and signal quality before building a mobile platform. Revisit the decision with a responder using a past incident and ask which observation would have changed their next action.
 

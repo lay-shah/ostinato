@@ -26,8 +26,8 @@ def pose(raised=False):
     return marks
 
 
-def frame(engine, t, rgba, marks):
-    return json.loads(engine.frame(t, WIDTH, HEIGHT, rgba, marks))
+def frame(engine, t, rgba, marks, sound=False):
+    return json.loads(engine.frame(t, WIDTH, HEIGHT, rgba, marks, sound))
 
 
 def test_unseen_chest_changes_view_and_resets_samples(engine):
@@ -47,6 +47,65 @@ def test_unseen_chest_changes_view_and_resets_samples(engine):
     state = frame(engine, 0, blank, [])
     assert state["view"] == 1
     assert state["elapsed"] == 0
+
+
+def test_camera_waits_for_automatic_text_response_check_at_every_weak_view(engine):
+    blank = bytes(WIDTH * HEIGHT * 4)
+    engine.command(0, "start", camera=True)
+    for view in range(1, 4):
+        start = (view - 1) * 21
+        for t in range(start, start + 5):
+            state = frame(engine, t, blank, [])
+            assert state["prompt"]["state"] == "idle"
+        state = frame(engine, start + 5, blank, [])
+        assert state["view"] == view
+        assert state["decision"]["action"] == "wait"
+        assert state["prompt"]["state"] == "speaking"
+        assert "showing text only" in state["prompt"]["detail"]
+        for t in range(start + 6, start + 19):
+            state = frame(engine, t, blank, [])
+            assert state["decision"]["action"] == "wait"
+        assert state["prompt"]["state"] == "watching"
+        state = frame(engine, start + 19, blank, [])
+        assert state["prompt"]["outcome"] == "none seen"
+        assert state["decision"]["status"] == "unable to assess"
+        assert state["decision"]["action"] == ("move" if view < 3 else "get help")
+        if view < 3:
+            engine.command(start + 20, "new_view")
+
+    assert json.loads(engine.command(63, "reset"))["prompt"]["state"] == "idle"
+    for t in range(63, 69):
+        state = frame(engine, t, blank, [])
+    assert state["view"] == 1
+    assert state["prompt"]["state"] == "speaking"
+
+    engine.command(0, "start")
+    for t in range(6):
+        state = frame(engine, t, blank, [])
+    assert state["decision"]["action"] == "move"
+    assert state["prompt"]["state"] == "idle"
+
+
+def test_automatic_voice_failure_falls_back_and_can_report_a_raise(engine):
+    blank = bytes(WIDTH * HEIGHT * 4)
+    engine.command(0, "start", camera=True)
+    for i in range(56):
+        state = frame(engine, i / 10, blank, pose(), sound=True)
+        if state["prompt"]["state"] == "speaking":
+            break
+    assert state["prompt"]["detail"] == "Speaking now"
+
+    failure = json.loads(engine.command(state["t"], "speech_failed"))
+    assert "showing text only" in failure["prompt"]["detail"]
+    for offset in range(1, 41):
+        state = frame(engine, (i + offset) / 10, blank, pose(), sound=True)
+        assert state["decision"]["action"] == "wait"
+    assert state["prompt"]["state"] == "watching"
+
+    for offset in range(41, 51):
+        state = frame(engine, (i + offset) / 10, blank, pose(raised=True), sound=True)
+    assert state["decision"]["status"] == "responded"
+    assert state["prompt"]["outcome"] == "response"
 
 
 def test_voice_completion_and_raised_wrist_report_a_response(engine):
