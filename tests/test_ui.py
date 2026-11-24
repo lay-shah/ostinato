@@ -180,3 +180,15 @@ def test_hand_raise_after_moving_needs_a_new_prompt(monkeypatch):
 
 def test_needs_the_same_seconds_as_the_estimator():
     assert ui.MIN_SECONDS == breathing.MIN_SECONDS
+
+
+def test_finished_rate_warns_when_no_longer_confirmed():
+    a = Assessor(0, 1)
+    a.update(25, OK)
+    d = a.update(28, OK)
+    frame = np.zeros((480, 640, 3), np.uint8)
+    _, p = ui.compose(frame, monitor(Reading(None, 0.0, "motion faded")), d)
+    assert any("Not confirmed now (motion faded)" in t for t in texts(p))
+    check_fits(p)
+    _, p = ui.compose(frame, monitor(OK), d)
+    assert not any("Not confirmed" in t for t in texts(p))
