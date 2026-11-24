@@ -9,8 +9,10 @@ import numpy as np
 
 from .breathing import Reading, estimate
 from .chest import ChestTracker, PoseFinder
+from .decision import Action, Assessor
 
 WINDOW = 30.0  # seconds of signal used for each reading
+EXTRA_VIEWS = 2  # times the app may ask for a different camera position
 
 
 class Monitor:
@@ -23,12 +25,15 @@ class Monitor:
         self.tracking = "starting"
         self._last_estimate = -np.inf
 
+    def reset(self, reason="need more data"):
+        self.samples.clear()
+        self.tracker.reset()
+        self.reading = Reading(None, 0.0, reason)
+        self._last_estimate = -np.inf
+
     def update(self, frame, t):
         if self.samples and t - self.samples[-1][0] > 1.0:
-            self.samples.clear()  # stream stalled; old and new do not join up
-            self.tracker.reset()
-            self.reading = Reading(None, 0.0, "stream interrupted")
-            self._last_estimate = -np.inf
+            self.reset("stream interrupted")  # old and new do not join up
         value, self.tracking = self.tracker.update(frame)
         self.samples.append((t, value))
         while t - self.samples[0][0] > WINDOW:
@@ -42,7 +47,7 @@ class Monitor:
         return self.reading
 
 
-def draw(frame, monitor):
+def draw(frame, monitor, decision):
     reading = monitor.reading
     if monitor.tracker.box:
         x0, y0, x1, y1, _ = monitor.tracker.box
@@ -53,10 +58,12 @@ def draw(frame, monitor):
     else:
         text, color = f"Unable to assess: {reading.reason}", (0, 190, 255)
     h, w = frame.shape[:2]
-    cv2.rectangle(frame, (0, 0), (w, 70), (25, 25, 25), -1)
+    cv2.rectangle(frame, (0, 0), (w, 96), (25, 25, 25), -1)
     cv2.putText(frame, text, (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-    note = "Research prototype. Not a medical device. Q to quit."
-    cv2.putText(frame, note, (12, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+    note = "Research prototype. Not a medical device. M: moved  R: restart  Q: quit"
+    plan = f"Decision: {decision.action.value} ({decision.reason})"
+    cv2.putText(frame, plan, (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+    cv2.putText(frame, note, (12, 86), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
     if len(monitor.samples) < 2:
         return
     t, y = map(np.array, zip(*monitor.samples))
@@ -86,6 +93,7 @@ def main(argv=None):
         parser.exit(1, "The video has no usable frame rate.\n")
     finder = PoseFinder()
     monitor = Monitor(ChestTracker(finder))
+    assessor = Assessor(0.0, EXTRA_VIEWS)
     start, n = time.monotonic(), 0
     try:
         while True:
@@ -97,11 +105,18 @@ def main(argv=None):
                 frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
             t = n / fps if args.video else time.monotonic() - start
             n += 1
-            monitor.update(frame, t)
-            draw(frame, monitor)
+            decision = assessor.update(t, monitor.update(frame, t))
+            draw(frame, monitor, decision)
             cv2.imshow("Ostinato", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            if key == ord("m") and assessor.decision.action is Action.MOVE:
+                monitor.reset()
+                assessor.arrived(t)
+            elif key == ord("r"):
+                monitor.reset()
+                assessor = Assessor(t, EXTRA_VIEWS)
     except KeyboardInterrupt:
         pass
     finally:
@@ -109,6 +124,8 @@ def main(argv=None):
         finder.close()
         cv2.destroyAllWindows()
     r = monitor.reading
+    d = assessor.decision
+    print(f"Decision: {d.action.value}, {d.status.value} ({d.reason})")
     print(f"Last reading: {r.status}" + (f", {r.bpm:.1f} breaths/min" if r.bpm is not None else f" ({r.reason})"))
 
 
