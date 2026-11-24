@@ -1,12 +1,12 @@
 # Plan
 
-| Milestone | Done when |
-|---|---|
-| 1. Breathing | Live rate and confidence from a laptop camera; declines to report on poor signal |
-| 2. Decision engine | Assess, reposition, and "unable to assess" logic is tested |
-| 3. Simulation | Robot chooses viewpoints and is compared with nearest-first search |
-| 4. Medic view | Ranked map shows confidence and reasons |
-| 5. Validation | Results against hand-counted breaths at two distances are reported |
+| Milestone | Done when | Status |
+|---|---|---|
+| 1. Breathing | Live rate and confidence from a laptop camera; declines to report on poor signal | Built; accuracy on people not measured |
+| 2. Decision engine | Assess, reposition, and "unable to assess" logic is tested | Built |
+| 3. Simulation | Robot chooses viewpoints and is compared with nearest-first search | Built; needs a real urgency cue |
+| 4. Medic view | Ranked map shows confidence and reasons | Built |
+| 5. Validation | Results against hand-counted breaths at two distances are reported | Tools built; no trials yet |
 
 ## Measures
 
