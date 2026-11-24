@@ -59,9 +59,12 @@ def draw(frame, monitor, decision):
         text, color = f"Unable to assess: {reading.reason}", (0, 190, 255)
     h, w = frame.shape[:2]
     cv2.rectangle(frame, (0, 0), (w, 96), (25, 25, 25), -1)
-    cv2.putText(frame, text, (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    cv2.putText(frame, f"Live: {text}", (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
     note = "Research prototype. Not a medical device. M: moved  R: restart  Q: quit"
     plan = f"Decision: {decision.action.value} ({decision.reason})"
+    if decision.completed_at_s is not None:
+        result = decision.status.value if decision.bpm is None else f"{decision.bpm:.1f} breaths/min"
+        plan = f"Completed at {decision.completed_at_s:.1f}s: {result} ({decision.reason})"
     cv2.putText(frame, plan, (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
     cv2.putText(frame, note, (12, 86), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
     if len(monitor.samples) < 2:

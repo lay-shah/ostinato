@@ -80,3 +80,57 @@ def test_decision_line_draws():
     before = frame.copy()
     draw(frame, m, Assessor(0, 1).decision)
     assert (frame != before).any()
+
+
+def test_paired_trial_from_synthetic_frames_to_decision(monkeypatch, tmp_path, capsys):
+    """Exercise the public CLI with simulated video, pose landmarks, clock, and counts."""
+    import json
+    from types import SimpleNamespace
+
+    from ostinato import chest, viewpoints
+
+    clock = [0.0]
+    captures = []
+
+    class Camera:
+        def __init__(self, index):
+            self.frame = 0
+            self.closed = False
+            captures.append(self)
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.frame += 1
+            clock[0] += 1 / 12
+            phase = 2 * np.pi * 16 / 60 * self.frame / 12
+            return True, scene(2 * np.sin(phase))
+
+        def release(self):
+            self.closed = True
+
+    class Pose:
+        def __call__(self, frame):
+            return None if len(captures) == 1 else POINTS
+
+        def close(self):
+            pass
+
+    answers = iter(["", "8", "", "8"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setattr(cv2, "VideoCapture", Camera)
+    monkeypatch.setattr(chest, "PoseFinder", Pose)
+    monkeypatch.setattr(viewpoints, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    path = tmp_path / "synthetic.json"
+    viewpoints.main(["trial", str(path), "--views", "occluded", "visible"])
+    capsys.readouterr()
+    assert all(camera.closed for camera in captures)
+    viewpoints.main(["report", str(path)])
+    report = json.loads(capsys.readouterr().out)
+    assert report["coverage"] == 0.5
+    assert report["accurate_second_view_recoveries"] == 1
+    viewpoints.main(["replay", str(path)])
+    runs = json.loads(capsys.readouterr().out)["runs"]
+    assert [event["action"] for event in runs[0]["events"]] == ["move", "report"]
+    assert runs[0]["time_to_usable_s"] > runs[1]["time_to_usable_s"] > 0

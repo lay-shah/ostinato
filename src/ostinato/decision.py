@@ -49,6 +49,8 @@ class Decision:
     reason: str
     bpm: float | None = None
 
+    completed_at_s: float | None = None
+
     @property
     def final(self) -> bool:
         return self.action in (Action.REPORT, Action.GET_HELP)
@@ -84,7 +86,8 @@ class Assessor:
         self._now = t
 
     def _set(self, action, reason, status=Status.UNABLE, bpm=None):
-        self.decision = Decision(action, status, reason, bpm)
+        completed = self._now if action in (Action.REPORT, Action.GET_HELP) else None
+        self.decision = Decision(action, status, reason, bpm, completed)
         return self.decision
 
     def _next_view(self, reason):

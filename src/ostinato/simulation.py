@@ -222,11 +222,14 @@ def assess(robot, person, views, policy):
     reached = robot.t
     a = Assessor(robot.t, min(EXTRA_VIEWS, len(views) - 1))
     used, arrived = [index], robot.t
+    failed_observation_s = 0.0
     del views[index]
     while not a.decision.final:
         robot.t += 1.0
         reading = observe(person, index, robot.t - arrived)
         d = a.update(robot.t, reading)
+        if d.action in (Action.MOVE, Action.GET_HELP):
+            failed_observation_s += robot.t - arrived
         while d.action is Action.MOVE:
             cost, _ = robot.paths()
             index = choose_view(known, views, cost, policy)
@@ -243,7 +246,8 @@ def assess(robot, person, views, policy):
     score = reading.confidence if d.bpm is not None else None
     return {
         "person": known.id, "reached_s": reached, "finished_s": robot.t, "views": used,
-        "status": d.status.value, "bpm": d.bpm, "score": score, "reason": d.reason,
+        "status": d.status.value, "failed_observation_s": failed_observation_s,
+        "bpm": d.bpm, "score": score, "reason": d.reason,
     }  # fmt: skip
 
 
@@ -258,7 +262,7 @@ def run(scene, order, view):
             del waiting[i]
             results.append({
                 "person": i, "reached_s": None, "finished_s": None, "views": [],
-                "status": Status.UNABLE.value, "bpm": None, "score": None, "reason": "no reachable view",
+                "status": Status.UNABLE.value, "bpm": None, "score": None, "failed_observation_s": 0.0, "reason": "no reachable view",
             })  # fmt: skip
     while waiting:
         cost, _ = robot.paths()
@@ -305,6 +309,8 @@ def compare(seeds, cue="useful", progress=False):
     finish = {k: [] for k in reach}
     total = {k: [] for k in reach}
     measured = {k: [0, 0] for k in reach}
+    usable_times = {k: [] for k in reach}
+    failed_s = {k: 0.0 for k in reach}
     reachable = urgent_count = 0
     for seed in seeds:
         if progress:
@@ -320,6 +326,8 @@ def compare(seeds, cue="useful", progress=False):
                 finish[k].append(np.mean([r["finished_s"] for r in hits]))
             if p == policies[0]:
                 reachable += len(hits)
+            usable_times[k].extend(r["finished_s"] for r in out["results"] if r["bpm"] is not None)
+            failed_s[k] += sum(r["failed_observation_s"] for r in out["results"])
             total[k].append(out["total_s"])
             measured[k][0] += sum(r["bpm"] is not None for r in out["results"])
             measured[k][1] += len(out["results"])
@@ -338,6 +346,9 @@ def compare(seeds, cue="useful", progress=False):
                                           int((diff > 1e-6).sum())],
             "urgent_finished_s": round(float(np.mean(finish[k])), 1),
             "total_s": round(float(np.mean(total[k])), 1),
+            "mean_mission_time_to_usable_s": round(float(np.mean(usable_times[k])), 1) if usable_times[k] else None,
+            "unassessed_fraction": round(1 - measured[k][0] / measured[k][1], 3),
+            "mean_failed_observation_s_per_scene": round(failed_s[k] / len(total[k]), 1),
             "measured_fraction": round(measured[k][0] / measured[k][1], 3),
         })  # fmt: skip
     return {
