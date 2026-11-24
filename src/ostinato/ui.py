@@ -30,6 +30,7 @@ HINTS = {
     "stream interrupted": "Waiting for steady video",
     "methods disagree": "Hold still a little longer",
     "rate outside measurable range": "Cannot measure here; a person should check",
+    "motion faded": "Motion dropped; a person should check",
     "need more data": "Hold still while it measures",
     "starting": "Finding the chest",
 }
@@ -83,11 +84,19 @@ class _Painter:
         self.text(x0 + 18, y0 + 13, title, 14, DIM, x1 - x0 - 36)
 
 
-def _banner(p, decision, prompt):
+def outdated(decision, reading):
+    """A finished rate that the camera no longer supports."""
+    return decision.bpm is not None and reading.bpm is None
+
+
+def _banner(p, decision, prompt, reading):
     headline, detail = prompt or decision_text(decision)
+    old = not prompt and outdated(decision, reading)
+    if old:
+        detail = f"Not confirmed now ({reading.reason}). Check the person or press R."
     if prompt:
         color = BLUE
-    elif decision.action in (Action.GET_HELP, Action.MOVE):
+    elif decision.action in (Action.GET_HELP, Action.MOVE) or old:
         color = AMBER
     elif decision.action is Action.REPORT:
         color = GREEN
@@ -188,7 +197,7 @@ def compose(frame, monitor, decision, check=None, view=1, views=1, window=30.0):
         cv2.rectangle(canvas, *corner, color[::-1], 2, cv2.LINE_AA)
     image = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
     p = _Painter(image)
-    _banner(p, decision, check.message() if check else None)
+    _banner(p, decision, check.message() if check else None, monitor.reading)
     _live(p, monitor)
     _wave(p, monitor, window)
     _steps(p, decision, check, view, views)

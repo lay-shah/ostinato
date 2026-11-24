@@ -16,6 +16,8 @@ MIN_COVERAGE = 0.8
 MAX_GAP = 1.0  # longest tolerated hole in tracking, seconds
 MIN_CONFIDENCE = 0.8
 MIN_RMS = 2e-4  # smallest usable motion, in shoulder widths
+FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for faded motion
+FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
 MAX_RATE_SPREAD = 4.0  # disagreement between window halves, breaths/min
 
 
@@ -83,6 +85,18 @@ def _autocorrelation_rate(x: np.ndarray, rate: float) -> tuple[float, float]:
     return 60 * FS / lag, float(scores[k])
 
 
+def _faded(velocity: np.ndarray, rate: float) -> bool:
+    """True if motion nearly vanished for about a breath, at any point.
+
+    Without this, a window that is mostly old breathing keeps reporting a rate
+    long after the motion has changed.
+    """
+    n = int(max(MIN_FADE_SECONDS, FADE_PERIODS * 60 / rate) * FS)
+    total = np.concatenate(([0.0], np.cumsum(velocity**2)))
+    rms = np.sqrt(np.maximum(total[n:] - total[:-n], 0) / n)
+    return bool(rms.min() < FADE_RATIO * np.median(rms))
+
+
 def estimate(times, values) -> Reading:
     """Estimate from timestamps (s) and displacement (shoulder widths).
 
@@ -132,7 +146,10 @@ def estimate(times, values) -> Reading:
     if not MIN_BPM - LIMIT_TOLERANCE <= rate <= MAX_BPM + LIMIT_TOLERANCE:
         return _decline("rate outside measurable range", score)
     low = butter(2, SEARCH_BPM[1] / 60 * 1.2, "lowpass", fs=FS, output="sos")
-    ac_rate, periodicity = _autocorrelation_rate(sosfiltfilt(low, y), rate)
+    smooth = sosfiltfilt(low, y)
+    if _faded(np.gradient(smooth, 1 / FS), rate):
+        return _decline("motion faded", score)
+    ac_rate, periodicity = _autocorrelation_rate(smooth, rate)
     if periodicity < MIN_PERIODICITY or abs(ac_rate - rate) > MAX_RATE_SPREAD:
         return _decline("methods disagree", score)
     mid = len(filtered) // 2

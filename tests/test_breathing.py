@@ -77,3 +77,38 @@ def test_out_of_range_breathing_is_not_given_a_wrong_rate(bpm):
         for _ in range(40):
             x = breathing(T, bpm, harmonic=harmonic, phase=rng.uniform(0, 2 * np.pi))
             assert estimate(T, x + rng.normal(0, 0.001, len(T))).bpm is None
+
+
+def _stopped(bpm, seconds, seed):
+    rng = np.random.default_rng(seed)
+    t = np.arange(0, 30, 1 / 15)
+    x = breathing(t, bpm, harmonic=0.2, phase=rng.uniform(0, 6))
+    i = len(t) - int(seconds * 15)
+    x[i:] = x[i]
+    return estimate(t, x + np.cumsum(rng.normal(0, 0.0003, len(t))))
+
+
+@pytest.mark.parametrize(("bpm", "seconds"), [(8, 12), (12, 8), (16, 6), (24, 5), (32, 5)])
+def test_rate_is_dropped_soon_after_motion_stops(bpm, seconds):
+    kept = sum(_stopped(bpm, seconds, seed).bpm is not None for seed in range(40))
+    assert kept <= 4
+
+
+@pytest.mark.parametrize("start", [0, 8, 14, 22])
+def test_pause_anywhere_in_the_window_is_declined(start):
+    t = np.arange(0, 30, 1 / 15)
+    x = breathing(t, 16)
+    pause = (t >= start) & (t < start + 8)
+    x[pause] = x[pause][0]
+    assert estimate(t, x).bpm is None
+
+
+def test_varying_breath_depth_is_still_measured():
+    ok = 0
+    for seed in range(60):
+        rng = np.random.default_rng(seed)
+        t = np.arange(0, 30, 1 / 15)
+        depth = np.interp(t, np.arange(0, 34, 4), np.clip(rng.normal(1, 0.2, 9), 0.5, 1.5))
+        r = estimate(t, depth * breathing(t, rng.uniform(10, 24), phase=rng.uniform(0, 6)))
+        ok += r.bpm is not None
+    assert ok >= 54
