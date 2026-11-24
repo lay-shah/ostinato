@@ -41,6 +41,18 @@ Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and che
 
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
+### Try it without a camera
+
+```bash
+ostinato --demo
+```
+
+This runs the real tracker, estimator, decisions, and voice prompt on a drawn person: a blocked view, a spoken prompt, a move, a measured rate, and then motion that fades. It is labeled synthetic throughout. Add `--no-prompt` to keep it silent.
+
+### Save a report
+
+Press S to save the current assessment as an HTML page in `data/`, which git ignores. It holds times, rates, and decisions, never video, and only you can read the file. Use `--reports FOLDER` to save elsewhere.
+
 ## Run the validation workflow
 
 Run the reproducible blocked-view demo with synthetic frames:

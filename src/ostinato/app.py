@@ -10,6 +10,8 @@ import numpy as np
 from .breathing import Reading, estimate
 from .chest import ChestTracker, PoseFinder
 from .decision import Action, Assessor
+from .demo import LABEL, Demo
+from .report import Recorder, save
 from .response import ResponseCheck, Speaker
 from .ui import H, W, compose
 
@@ -71,10 +73,15 @@ def main(argv=None):
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--no-prompt", action="store_true", help="do not ask for a response on its own")
     parser.add_argument("--video", help="analyze a local video instead of the camera")
+    parser.add_argument("--demo", action="store_true", help="show a synthetic scene, without a camera")
+    parser.add_argument("--reports", default="data", help="folder for reports saved with S (default: data)")
     args = parser.parse_args(argv)
+    if args.demo and args.video:
+        parser.error("choose --demo or --video")
+    demo = Demo() if args.demo else None
 
     try:
-        cap = cv2.VideoCapture(args.video) if args.video else open_camera(args.camera)
+        cap = demo or (cv2.VideoCapture(args.video) if args.video else open_camera(args.camera))
     except KeyboardInterrupt:
         parser.exit(1, "Stopped.\n")
     if cap is None or not cap.isOpened():
@@ -86,11 +93,13 @@ def main(argv=None):
     fps = cap.get(cv2.CAP_PROP_FPS)
     if args.video and not fps > 0:
         parser.exit(1, "The video has no usable frame rate.\n")
-    finder = PoseFinder()
+    finder = demo or PoseFinder()
     monitor = Monitor(ChestTracker(finder))
     prompts = not (args.video or args.no_prompt)
     assessor = Assessor(0.0, EXTRA_VIEWS, ask_first=prompts)
     check = ResponseCheck(Speaker())
+    recorder = Recorder(LABEL if demo else None)
+    note, note_until = None, 0.0
     start, n = time.monotonic(), 0
     cv2.namedWindow(TITLE, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     cv2.resizeWindow(TITLE, W, H)
@@ -113,14 +122,22 @@ def main(argv=None):
             elif assessor.wants_ask:
                 check.ask(t)
             view = EXTRA_VIEWS + 1 - assessor.views_left - (decision.action is Action.MOVE)
-            screen, _ = compose(frame, monitor, decision, check, view, EXTRA_VIEWS + 1, WINDOW)
+            screen, _ = compose(frame, monitor, decision, check, view, EXTRA_VIEWS + 1, WINDOW, LABEL if demo else None, note if t < note_until else None)
+            recorder.update(t, reading, decision, check, view)
             cv2.imshow(TITLE, screen)
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q") or cv2.getWindowProperty(TITLE, cv2.WND_PROP_VISIBLE) < 1:
                 break
             if key == ord("v") and not (decision.final or args.video):
                 check.ask(t)
-            elif key == ord("m") and assessor.decision.action is Action.MOVE:
+            elif key == ord("s"):
+                try:
+                    note = f"Saved {save(recorder, args.reports)}"
+                except (OSError, ValueError) as error:
+                    note = f"Could not save: {error}"
+                print(note, flush=True)
+                note_until = t + 5
+            elif (key == ord("m") and decision.action is Action.MOVE) or (demo and demo.step(t, decision)):
                 monitor.reset()
                 check.cancel()
                 assessor.arrived(t)
@@ -128,6 +145,9 @@ def main(argv=None):
                 monitor.reset()
                 check.cancel()
                 assessor = Assessor(t, EXTRA_VIEWS, ask_first=prompts)
+                recorder.restart(t)
+                if demo:
+                    demo.restart()
     except KeyboardInterrupt:
         pass
     finally:

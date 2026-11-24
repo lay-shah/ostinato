@@ -169,20 +169,21 @@ def _steps(p, decision, check, view, views):
         p.text(x0 + 108, y, value, 17, c, x1 - x0 - 126)
 
 
-def _footer(p, decision):
+def _footer(p, decision, label, note):
     x = 24
     keys = [("V", "Ask", not decision.final), ("M", "Moved", decision.action is Action.MOVE),
-            ("R", "Restart", True), ("Q", "Quit", True)]  # fmt: skip
-    for key, label, on in keys:
+            ("R", "Restart", True), ("S", "Save report", True), ("Q", "Quit", True)]  # fmt: skip
+    for key, name, on in keys:
         color = INK if on else LINE
         p.d.rounded_rectangle((x, 618, x + 28, 644), 6, outline=color)
         p.text(x + 8, 622, key, 16, color, 18)
-        p.text(x + 38, 622, label, 16, color, 70)
-        x += 116
-    p.text(W - 24 - 466, 622, "Research prototype. Not a medical device. Video is never saved.", 16, DIM, 466)
+        p.text(x + 36, 622, name, 16, color, 92)
+        x += 146 if key == "S" else 108
+    text = note or label or "Research prototype. Not a medical device. Video is never saved."
+    p.text(x + 8, 622, text, 16, AMBER if note or label else DIM, W - 24 - x - 8)
 
 
-def compose(frame, monitor, decision, check=None, view=1, views=1, window=30.0):
+def compose(frame, monitor, decision, check=None, view=1, views=1, window=30.0, label=None, note=None):
     """Return (screen image in BGR, painter). `frame` is not changed."""
     canvas = np.full((H, W, 3), BG[::-1], np.uint8)
     x0, y0, x1, y1 = VIDEO
@@ -203,5 +204,8 @@ def compose(frame, monitor, decision, check=None, view=1, views=1, window=30.0):
     _live(p, monitor)
     _wave(p, monitor, window)
     _steps(p, decision, check, view, views)
-    _footer(p, decision)
+    if label:
+        p.d.rectangle((x0, y0, x1, y0 + 30), fill=BG)
+        p.text(x0 + 12, y0 + 6, label, 16, AMBER, x1 - x0 - 24, bold=True)
+    _footer(p, decision, label, note)
     return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR), p

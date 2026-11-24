@@ -133,7 +133,7 @@ def run_app(monkeypatch, keys, body, args=(), seconds=30, fps=10):
         def start(self, t):
             asks.append(round(clock[0], 1))
 
-    def compose(frame, m, d, check, view, views, window):
+    def compose(frame, m, d, check, view, views, window, label=None, note=None):
         log.append((clock[0], d, view))
         return frame, None
 
