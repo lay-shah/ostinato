@@ -69,6 +69,10 @@ class _Arm:
         self._last = self._down_since = self._up_since = None
         self._was_down = False
 
+    @property
+    def raised_since(self):
+        return self._up_since
+
     def update(self, t, height):
         """Return how long the hand has been held up after being down."""
         if self._last is not None and t - self._last > MAX_GAP:
@@ -151,6 +155,7 @@ class ResponseCheck:
         self.speaker = speaker
         self.state = "idle"
         self.outcome = None  # "response" or "none seen", for the latest prompt
+        self._seen = False
         self._arms = (_Arm(), _Arm())
         self._body = self._watch_start = self._asked_at = None
 
@@ -161,6 +166,7 @@ class ResponseCheck:
     def ask(self, t):
         if not self.active:
             self.state, self._asked_at, self.outcome = "speaking", t, None
+            self._seen = False
             self.speaker.start(t)
 
     def cancel(self):
@@ -175,18 +181,23 @@ class ResponseCheck:
         if body is not None:
             old = self._body
             if old is not None and math.dist(body.center, old.center) > MAX_JUMP * old.width:
+                self._seen = False
                 for arm in self._arms:
                     arm.reset()
             self._body = body
         heights = (None, None) if body is None else (body.left, body.right)
         held = [arm.update(t, h) for arm, h in zip(self._arms, heights)]
 
+        if self.active:
+            for duration, arm in zip(held, self._arms):
+                if duration >= HOLD_SECONDS and arm.raised_since >= self._asked_at:
+                    self._seen = True
         if self.state == "speaking" and self.speaker.finished(t):
             self.state, self._watch_start = "watching", t
         if self.state != "watching":
             return False
         # The hand must be raised after the request, or while it was being made.
-        if max(held) >= HOLD_SECONDS and t - max(held) >= self._asked_at:
+        if self._seen:
             self.state, self.outcome = "done", "response"
             return True
         if t - self._watch_start >= LISTEN_SECONDS:
@@ -200,4 +211,4 @@ class ResponseCheck:
         how = "Voice unavailable: showing text only" if self.speaker.failed else "Asked out loud"
         if self.state == "speaking":
             return f"ASKING: {PROMPT}", how if self.speaker.failed else "Speaking now"
-        return "WATCHING for a raised hand", f"{how}. No response would prove nothing."
+        return "WATCHING for a raised hand", f"{how}. Show one wrist below your shoulder, then raise it and hold."
