@@ -139,3 +139,26 @@ def test_map_image(tmp_path):
     scene = sim.make_scene(1000)
     sim.draw(scene, sim.run(scene, "ranked", "predicted"), tmp_path / "map.png")
     assert (tmp_path / "map.png").stat().st_size > 1000
+
+
+def test_worlds_stay_paired_when_one_assumption_changes():
+    a, b = sim.make_scene(1000), sim.make_scene(1000, world=sim.World(facing_error=3.0))
+    assert (a.walls == b.walls).all()
+    for p, q in zip(a.people, b.people):
+        assert (p.known.cell, p.facing, p.urgent, p.bpm) == (q.known.cell, q.facing, q.urgent, q.bpm)
+
+
+def test_extreme_worlds_behave():
+    none = sim.compare(range(1000, 1004), world=sim.World(weak=1.0))
+    assert all(p["measured_fraction"] == 0 for p in none["policies"])
+    hidden = sim.compare(range(1000, 1004), world=sim.World(hidden=1.0))
+    assert all(p["measured_fraction"] == 0 for p in hidden["policies"])
+    with pytest.raises(ValueError):
+        sim.compare(range(1000, 1002), policies=[("ranked", "predicted")])
+
+
+def test_sweep_covers_every_assumption(monkeypatch):
+    monkeypatch.setattr(sim, "SWEEP", {k: v[:1] for k, v in sim.SWEEP.items()})
+    out = sim.sweep(range(1000, 1003))
+    assert out["source"] == "simulation"
+    assert {r["assumption"] for r in out["rows"]} == set(sim.World.__dataclass_fields__)

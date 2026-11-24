@@ -31,6 +31,16 @@ CUES = {"useful": 0.25, "weak": 0.08, "useless": 0.0}  # how far urgency shifts 
 
 
 @dataclass(frozen=True)
+class World:
+    """Assumptions about the world. Defaults are guesses, so `sweep` varies them."""
+
+    facing_error: float = 0.35  # radians, standard deviation of the chest-direction estimate
+    hidden: float = 0.2  # chance that unmapped debris blocks a view
+    weak: float = 0.1  # chance that a person's motion is too weak to measure
+    usable_degrees: float = 75.0  # how far from face-on a chest can be measured
+
+
+@dataclass(frozen=True)
 class Known:
     id: int
     cell: tuple[int, int]
@@ -46,6 +56,7 @@ class Person:
     weak_signal: bool
     blocked: frozenset  # view indices hidden by unmapped debris
     bpm: float
+    usable_degrees: float = 75.0
 
 
 @dataclass(frozen=True)
@@ -67,7 +78,7 @@ def angle_gap(a, b):
     return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
 
 
-def make_scene(seed, cue="useful"):
+def make_scene(seed, cue="useful", world=World()):
     rng = np.random.default_rng(seed)
     walls = np.zeros((N, N), bool)
     for _ in range(9):
@@ -87,10 +98,12 @@ def make_scene(seed, cue="useful"):
         facing = float(rng.uniform(-math.pi, math.pi))
         # Draw the same random numbers for every cue level, so scenes stay paired.
         cue_value = 0.5 + CUES[cue] * (1 if urgent else -1) + 0.25 * float(rng.normal())
-        known = Known(i, cell, facing + float(rng.normal(0, 0.35)), min(0.95, max(0.05, cue_value)))
-        blocked = frozenset(int(v) for v in range(8) if rng.random() < 0.2)
+        known = Known(i, cell, facing + float(rng.normal(0, world.facing_error)), min(0.95, max(0.05, cue_value)))
+        blocked = frozenset(int(v) for v in range(8) if rng.random() < world.hidden)
         bpm = float(rng.uniform(26, 38) if urgent else rng.uniform(10, 24))
-        people.append(Person(known, urgent, facing, bool(rng.random() < 0.1), blocked, bpm))
+        people.append(
+            Person(known, urgent, facing, bool(rng.random() < world.weak), blocked, bpm, world.usable_degrees)
+        )
     return Scene(walls, start, tuple(people))
 
 
@@ -183,7 +196,7 @@ def choose_person(candidates, cost, policy):
 
 def observe(person, index, seconds):
     """Simulated reading after `seconds` at a view."""
-    if index in person.blocked or angle_gap(person.facing, view_angle(index)) > math.radians(75):
+    if index in person.blocked or angle_gap(person.facing, view_angle(index)) > math.radians(person.usable_degrees):
         return Reading(None, 0.0, "chest not visible")
     if seconds < MIN_SECONDS:
         return Reading(None, 0.0, "need more data")
@@ -302,9 +315,11 @@ def _interval(x):
     return [round(float(v), 1) for v in np.percentile(means, [2.5, 97.5])]
 
 
-def compare(seeds, cue="useful", progress=False):
+def compare(seeds, cue="useful", progress=False, world=World(), policies=None):
     """Paired comparison. Primary measure: seconds to reach urgent people."""
-    policies = [(o, v) for o in ORDERS for v in VIEWS]
+    policies = policies or [(o, v) for o in ORDERS for v in VIEWS]
+    if policies[0] != ("nearest", "nearest"):
+        raise ValueError("the first policy must be nearest-first")
     reach = {name(*p): [] for p in policies}  # one mean per scene
     finish = {k: [] for k in reach}
     total = {k: [] for k in reach}
@@ -315,7 +330,7 @@ def compare(seeds, cue="useful", progress=False):
     for seed in seeds:
         if progress:
             print(f"{cue} cue, scene {seed}", file=sys.stderr, flush=True)
-        scene = make_scene(seed, cue)
+        scene = make_scene(seed, cue, world)
         urgent = {p.known.id for p in scene.people if p.urgent}
         urgent_count += len(urgent)
         for p in policies:
@@ -357,6 +372,34 @@ def compare(seeds, cue="useful", progress=False):
     }  # fmt: skip
 
 
+SWEEP = {
+    "facing_error": (0.0, 0.35, 0.8, 1.6, 3.0),
+    "hidden": (0.0, 0.2, 0.5, 0.8),
+    "weak": (0.0, 0.1, 0.3, 0.6),
+    "usable_degrees": (40.0, 75.0, 110.0),
+}
+
+
+def sweep(seeds, cue="weak", progress=False):
+    """Vary one assumption at a time. Compare nearest-first with the full planner."""
+    rows = []
+    for field, values in SWEEP.items():
+        for value in values:
+            if progress:
+                print(f"{field} = {value}", file=sys.stderr, flush=True)
+            out = compare(
+                seeds, cue, world=World(**{field: value}), policies=[("nearest", "nearest"), ("ranked", "predicted")]
+            )
+            base, ours = out["policies"]
+            rows.append({
+                "assumption": field, "value": value, "default": value == getattr(World(), field),
+                "measured_nearest_first": base["measured_fraction"], "measured_planner": ours["measured_fraction"],
+                "change_in_reach_s": ours["change_vs_nearest_first_s"], "change_95ci": ours["change_95ci"],
+                "change_in_total_s": round(ours["total_s"] - base["total_s"], 1),
+            })  # fmt: skip
+    return {"source": "simulation", "cue": cue, "scenes": len(list(seeds)), "rows": rows}
+
+
 def draw(scene, out, path):
     import cv2
 
@@ -395,16 +438,23 @@ def main(argv=None):
     c = sub.add_parser("compare", help="compare policies over many scenes")
     c.add_argument("--scenes", type=int, default=100)
     c.add_argument("--first-seed", type=int, default=0)
+    w = sub.add_parser("sweep", help="vary the simulation's assumptions")
+    w.add_argument("--scenes", type=int, default=60)
+    w.add_argument("--first-seed", type=int, default=2000)
+    w.add_argument("--cue", choices=CUES, default="weak")
     s = sub.add_parser("scene", help="run one scene")
     s.add_argument("seed", type=int)
     s.add_argument("--policy", choices=[BASELINE, "ranked"], default="ranked")
     s.add_argument("--image", help="save a map as a PNG")
     s.add_argument("--html", help="save the offline medic page")
     args = parser.parse_args(argv)
-    if args.command == "compare":
+    if args.command in ("compare", "sweep"):
         if args.scenes < 1 or args.first_seed < 0:
             parser.error("scenes must be positive and first-seed nonnegative")
         seeds = range(args.first_seed, args.first_seed + args.scenes)
+        if args.command == "sweep":
+            print(json.dumps(sweep(seeds, args.cue, progress=True), indent=2))
+            return
         print(json.dumps([compare(seeds, cue, progress=True) for cue in CUES], indent=2))
         return
     if args.seed < 0:

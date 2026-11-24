@@ -30,6 +30,34 @@ The main measure is mean time to reach urgent people, averaged within each of th
 - Predicting views raises the share measured, but shows no clear effect on reach time.
 - With a useful cue, the whole search took longer: 252 s versus 238 s.
 
+## What if the assumptions are wrong?
+
+`ostinato-sim sweep` changes one assumption at a time (60 scenes, seeds 2000-2059, weak urgency cue). Bold values are the defaults. The planner is not told that the world changed.
+
+| Assumption | Value | Measured: nearest-first | Measured: planner | Change in time to reach urgent people (95% CI) | Change in total time |
+|---|---:|---:|---:|---:|---:|
+| Chest-direction error (radians) | 0 | 66.8% | 81.3% | -29.7 s (-45.8 to -14.7) | +8.2 s |
+| Chest-direction error (radians) | **0.35** | 66.8% | 80.7% | -29.3 s (-45.7 to -14.4) | +8.6 s |
+| Chest-direction error (radians) | 0.8 | 66.8% | 78.5% | -27.9 s (-44.1 to -13.0) | +14.5 s |
+| Chest-direction error (radians) | 1.6 | 66.8% | 71.3% | -24.8 s (-41.3 to -9.5) | +21.2 s |
+| Chest-direction error (radians) | 3 | 66.8% | 67.1% | -23.6 s (-39.8 to -8.5) | +23.3 s |
+| Chance a view is blocked | 0 | 70.4% | 82.5% | -31.6 s (-49.3 to -15.5) | +6.9 s |
+| Chance a view is blocked | **0.2** | 66.8% | 80.7% | -29.3 s (-45.7 to -14.4) | +8.6 s |
+| Chance a view is blocked | 0.5 | 49.5% | 62.5% | -23.0 s (-38.4 to -9.0) | +16.8 s |
+| Chance a view is blocked | 0.8 | 21.5% | 30.2% | -16.3 s (-29.9 to -3.1) | +29.1 s |
+| Chance motion is too weak | 0 | 76.7% | 92.4% | -33.8 s (-47.3 to -21.1) | -7.2 s |
+| Chance motion is too weak | **0.1** | 66.8% | 80.7% | -29.3 s (-45.7 to -14.4) | +8.6 s |
+| Chance motion is too weak | 0.3 | 52.6% | 65.3% | -26.9 s (-46.4 to -10.1) | +29.1 s |
+| Chance motion is too weak | 0.6 | 32.0% | 38.1% | -14.9 s (-37.6 to +5.0) | +70.6 s |
+| Usable angle from face-on (degrees) | 40 | 43.8% | 66.2% | -25.5 s (-40.0 to -12.2) | +14.6 s |
+| Usable angle from face-on (degrees) | **75** | 66.8% | 80.7% | -29.3 s (-45.7 to -14.4) | +8.6 s |
+| Usable angle from face-on (degrees) | 110 | 80.7% | 85.2% | -31.5 s (-49.2 to -15.1) | +8.0 s |
+
+- Choosing views by chest direction helps only if that direction can be estimated. At 3 radians of error it is essentially random, and the measured share matches nearest-first (67.1% vs. 66.8%).
+- The gain in reaching urgent people shrinks as views fail or motion is too weak, and is not clear when 60% of people cannot be measured.
+- The full search takes longer in every world except when everyone is measurable.
+- Reaching urgent people sooner still depends on an urgency cue that does not exist yet.
+
 ## Limits
 
 People's locations are assumed known. View success and the urgency cue follow rules we made up, and the planner's chest-direction rule resembles the rule that generates outcomes, which favors it. Readings are always correct when given, and signals never drop out. People do not block views, and walls are fully mapped. The attention order is illustrative, not a triage method. No real urgency cue exists yet, so these gains cannot be claimed for a real robot.
