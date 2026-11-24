@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import pytest
 
-from ostinato.app import Monitor
+from ostinato.app import Monitor, draw
 from ostinato.chest import ChestTracker
+from ostinato.decision import Assessor
 
 POINTS = np.array([[420, 160], [220, 160], [390, 420], [250, 420]], float)
 
@@ -65,3 +66,17 @@ def test_stalled_stream_restarts():
     m = run(15)
     m.update(scene(0), 45.0)
     assert m.reading.bpm is None and len(m.samples) == 1
+
+
+def test_reset_discards_signal_from_old_view():
+    m = run(15)
+    m.reset()
+    assert m.reading.bpm is None and not m.samples and m.tracker.box is None
+
+
+def test_decision_line_draws():
+    m = run(15, seconds=2)
+    frame = scene(0)
+    before = frame.copy()
+    draw(frame, m, Assessor(0, 1).decision)
+    assert (frame != before).any()
