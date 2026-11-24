@@ -5,6 +5,7 @@ import json
 import math
 import time
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 from pathlib import Path
 from statistics import mean
 
@@ -97,7 +98,7 @@ def capture(camera, view):
 
     # A blocked camera read can leave the manual and camera windows out of sync.
     edges = [0.0, *times, elapsed]
-    if not times or max(b - a for a, b in zip(edges, edges[1:])) > 1:
+    if not times or max(b - a for a, b in pairwise(edges)) > 1:
         raise ValueError("Camera timing interrupted; repeat the trial")
     reading = estimate(times, motion)
     trace.append((elapsed, reading.bpm, reading.confidence, reading.reason))
@@ -116,7 +117,7 @@ def simulate(name, sites, policy):
     events = []
     while remaining:
         # Visibility is a pre-observation geometric cue. The estimator outcome is hidden.
-        def rank(site):
+        def rank(site, position=position):
             distance = abs(site[1] - position)
             return (site[2] if policy == "visibility-first" else 0, distance, site[0])
 
