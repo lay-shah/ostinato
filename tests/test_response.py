@@ -170,3 +170,23 @@ def test_no_voice_installed(monkeypatch):
     check.ask(0)
     check.update(1, None)
     assert "Voice unavailable" in check.message()[1]
+
+
+def test_pre_raised_hand_does_not_mask_other_hand():
+    check = ResponseCheck(Quiet(0))
+    hits = []
+    for step in range(60):
+        t = step / 10
+        if step == 25:
+            check.ask(t)
+        left = .8 if step >= 10 else -1
+        right = .8 if step >= 30 else -1
+        if check.update(t, Body((300, 200), 200, left, right)):
+            hits.append(t)
+    assert len(hits) == 1 and hits[0] >= 3.6
+
+
+def test_completed_raise_survives_lowering_before_speech_finishes():
+    hit, check = play(lambda t: .8 if 2.3 < t < 3.3 else -1)
+    assert hit == pytest.approx(4.0, abs=.1)
+    assert check.outcome == "response"
