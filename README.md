@@ -2,7 +2,7 @@
 
 Ostinato is a planned autonomous robot that helps responders find and assess casualties in disaster areas where communication networks are down. It is designed to detect people, measure breathing from chest movement, check for a response to a spoken prompt, and report "unable to assess" when its data is not trustworthy. All processing is intended to run on the device.
 
-**Status:** early breathing detector for one person, tested on synthetic signals and video only. It has not been validated against counted breaths. It decides whether to report, wait, move, or get help, but navigation does not exist yet.
+**Status:** early breathing detector for one person, tested on synthetic signals and video only. It has not been validated against counted breaths. It decides whether to report, wait, move, or get help. Navigation exists only in [simulation](docs/SIMULATION.md).
 
 > Research prototype. Not a medical device, and not for use in real emergencies. No detected motion must never be reported as "not breathing" or "dead".
 
