@@ -162,3 +162,9 @@ def test_sweep_covers_every_assumption(monkeypatch):
     out = sim.sweep(range(1000, 1003))
     assert out["source"] == "simulation"
     assert {r["assumption"] for r in out["rows"]} == set(sim.World.__dataclass_fields__)
+
+
+def test_scene_creates_missing_folders(tmp_path, capsys):
+    page, image = tmp_path / "a" / "m.html", tmp_path / "b" / "m.png"
+    sim.main(["scene", "1000", "--html", str(page), "--image", str(image)])
+    assert page.exists() and image.exists() and "simulation" in capsys.readouterr().out

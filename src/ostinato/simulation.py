@@ -463,10 +463,12 @@ def main(argv=None):
     choice = ("nearest", "nearest") if args.policy == BASELINE else ("ranked", "predicted")
     out = run(scene, *choice)
     if args.image:
+        Path(args.image).parent.mkdir(parents=True, exist_ok=True)
         draw(scene, out, args.image)
     if args.html:
         from .medic import render
 
+        Path(args.html).parent.mkdir(parents=True, exist_ok=True)
         Path(args.html).write_text(render(scene, out), encoding="utf-8")
     out.pop("track")
     print(json.dumps({"source": "simulation", **out, "attention_order": rank_for_medics(out["results"])}, indent=2))
