@@ -118,6 +118,7 @@ class ChestTracker:
         self.switched = False  # now following what may be someone else
         self.position = 0.0
         self.head = 0.0  # head motion on the same scale, while it can be seen
+        self.sideways = 0.0  # chest motion across the image, on the same scale
         self.background = 0.0  # vertical motion subtracted so far
         self.box = None
 
@@ -229,6 +230,7 @@ class ChestTracker:
         if np.linalg.norm(step) > MAX_STEP:
             return np.nan, "too much movement"
         self.position += float(step[1])
+        self.sideways += float(step[0])
         self.background += float(camera[1]) / width
 
         if head is not None:
