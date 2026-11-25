@@ -53,6 +53,7 @@ def summarize(pairs, tolerance_bpm=2.0):
     }
 
 
+STALE_FRAMES = 5
 FRAMING_SECONDS, STEADY_SECONDS = 8.0, 2.0
 
 
@@ -79,18 +80,19 @@ def check_framing(cap, tracker, shrink):
     return False
 
 
-def capture(camera, view):
+def capture(camera, view, announce=None):
+    """Record one view. `announce` also speaks the start and stop, if given."""
     import cv2
 
-    from .app import Monitor
+    from .app import Monitor, open_camera
     from .breathing import estimate
     from .chest import ChestTracker, PoseFinder
 
     input(f"Set up view {view}. Observer ready? Press Enter to begin. ")
-    cap = cv2.VideoCapture(camera)
+    cap = open_camera(camera)
     finder = None
     try:
-        if not cap.isOpened():
+        if cap is None:
             raise ValueError("Camera unavailable")
         finder = PoseFinder()
 
@@ -102,7 +104,11 @@ def capture(camera, view):
 
         check_framing(cap, ChestTracker(finder), shrink)
         input("Keep still. Observer, press Enter and start counting at START. ")
-        cap.read()  # drop a frame that waited while you read this
+        if announce:
+            announce("Ready. Start")
+        # Drop frames that waited meanwhile.
+        for _ in range(STALE_FRAMES):
+            cap.read()
         # The same monitor as the live app, recorded on every frame, so replay
         # sees each tracking dropout that would have restarted confirmation.
         monitor = Monitor(ChestTracker(finder))
@@ -123,8 +129,11 @@ def capture(camera, view):
             trace.append((elapsed, r.bpm, r.confidence, r.reason))
         elapsed = time.monotonic() - start
         print("STOP counting", flush=True)
+        if announce:
+            announce("Stop")
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
         if finder is not None:
             finder.close()
 

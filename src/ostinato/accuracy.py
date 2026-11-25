@@ -144,6 +144,14 @@ def render(result):
     )
 
 
+def save(result, path):
+    """Write a new page that only its owner can read."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as f:
+        f.write(render(result))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="+", type=Path)
@@ -155,10 +163,7 @@ def main(argv=None):
             raise ValueError("duplicate trial file")
         result = analyze([load_pair(p) for p in args.files], args.tolerance_bpm)
         if args.html:
-            args.html.parent.mkdir(parents=True, exist_ok=True)
-            handle = os.open(args.html, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(handle, "w", encoding="utf-8") as f:
-                f.write(render(result))
+            save(result, args.html)
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, f"{error}\n")
     print(json.dumps(result, indent=2))
