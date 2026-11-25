@@ -415,3 +415,15 @@ def test_swaying_sideways_is_never_breathing():
 
 def test_breathing_is_measured_through_unrelated_sideways_motion():
     assert sway(across=2.0, up=0.0, breath=2.0).bpm == pytest.approx(16, abs=1)
+
+
+def test_person_tilted_between_upright_and_lying_is_still_measured():
+    from ostinato.chest import LYING_TILT
+
+    rng = np.random.default_rng(1003)
+    points, body, head = lying(LYING_TILT, 0.55)
+    monitor = Monitor(ChestTracker(lambda f: points + rng.normal(0, 1.0, points.shape)))
+    for i in range(280):
+        frame = np.where(body[..., None] == 1, shift(BODY, 0, 2 * np.sin(2 * np.pi * 15 / 60 * i / 10)), BACK)
+        monitor.update(np.where(head[..., None] == 1, FACE, frame), i / 10)
+    assert monitor.reading.bpm == pytest.approx(15, abs=1)
