@@ -38,7 +38,7 @@ def play_demo(monkeypatch, tmp_path, seconds, keys=()):
 
     def compose(*args):
         log.append((clock[0], args[2], args[1].reading, args[6:]))
-        return (real(*args) if len(log) % 60 == 1 else (args[0], None))
+        return real(*args) if len(log) % 60 == 1 else (args[0], None)
 
     def key(_):
         clock[0] += 0.001
@@ -136,3 +136,28 @@ def test_report_warns_when_rate_was_no_longer_confirmed():
     assert "measured at 28 s" in page and "not confirmed" not in page
     r.update(45, faded, a.update(45, faded), check, 1)
     assert "not confirmed when saved" in render(r, "today")
+
+
+def responded_report(readings):
+    recorder, check = Recorder(), ResponseCheck(Voice())
+    assessor = Assessor(0, 1)
+    for t, reading in readings:
+        recorder.update(t, reading, assessor.update(t, reading, responded=t >= 10), check, 1)
+    return render(recorder, "now")
+
+
+def test_report_explains_a_short_record_without_a_rate():
+    page = responded_report([(t, Reading(None, 0.0, "need more data")) for t in range(17)])
+    assert "Responded: raised a hand" in page
+    assert "needs at least 25 seconds of clear video, and this record covers 16" in page
+
+
+def test_report_mentions_a_rate_seen_after_a_response():
+    page = responded_report(
+        [(t, Reading(15.0, 0.9, "ok") if t > 40 else Reading(None, 0.0, "need more data")) for t in range(51)]
+    )
+    assert (
+        "in 10 one-second checks: typically 15.0 breaths/min." in page and "not part of the decision" in page
+    )
+    long = responded_report([(t, Reading(None, 0.0, "chest not visible")) for t in range(51)])
+    assert "live breathing rate" not in long and "needs at least" not in long
