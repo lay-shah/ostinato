@@ -21,6 +21,7 @@ HINTS = {
     "chest not visible": "Sit back: show your head and chest",
     "not enough chest detail": "Try patterned clothing or more light",
     "cannot check camera motion": "Show some background beside the person",
+    "chest moving unevenly": "Keep clothing still, or try another view",
     "background moving": "Something behind the person is moving",
     "whole body moving": "Ask the person to keep their body still",
     "camera moving": "Keep the camera still",

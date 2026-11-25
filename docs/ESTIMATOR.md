@@ -7,7 +7,7 @@ Everything here is synthetic. It shows how the estimator behaves on motion we ma
 1. At least 25 s of chest motion, tracked in at least 80% of frames, with no gap over 1 s.
 2. Enough motion, with no lurch that dwarfs it.
 3. The signal must not mirror the background. A curtain or fan is otherwise subtracted as camera motion and looks like breathing. Nor may it follow the background: on a faint wall, camera motion is only partly cancelled, and the rest looks like breathing. Points that scatter, as noise on a plain wall or shirt does, are not used.
-4. The head must not move with the chest by about as much. That is rocking. This check needs a head with visible detail. Nor may the chest move as much sideways, in step. That is swaying.
+4. The head must not move with the chest by about as much. That is rocking. This check needs a head with visible detail. Nor may the chest move as much sideways, in step. That is swaying. The left and right halves of the chest must move together, unlike wind in clothing or a passing shadow. An injured chest that moves unevenly is declined too.
 5. Displacement and velocity must agree on a rate between 6 and 42 breaths/min, and the signal must repeat itself one breath later.
 6. Motion must not fade for about a breath anywhere in the window, so an old rate does not linger.
 7. Either the rhythm is very clear and steady, or at least four breaths can be counted from both peaks and troughs, with similar length and depth, and agree with the spectrum.
@@ -62,7 +62,7 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 
 - Lying down, a hand raised toward the ceiling counts when seen from the side, up to about 40 degrees above level. From higher, or with the head or feet toward the camera, it may be missed.
 
-- Motion that rises and falls regularly within the breathing band can pass, such as steady sway, rocking with the face covered, wind on clothing, or a moving shadow.
+- Motion that rises and falls regularly within the breathing band can pass, such as steady sway, rocking with the face covered, or wind and shadows that move the whole chest at once.
 - Irregular breathing is almost always declined.
 - A slow breather can show an old rate for several seconds after motion stops.
 - One person at a time. If the tracked position jumps to someone else the window restarts, but two people close together cannot be told apart.
