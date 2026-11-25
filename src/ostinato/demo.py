@@ -30,7 +30,8 @@ def _texture(seed, low, high):
 class Demo:
     """Stands in for both the camera and the pose finder."""
 
-    def __init__(self, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, clock=time.monotonic, sleep=time.sleep, lying=False):
+        self.lying = lying
         self._clock, self._sleep = clock, sleep
         self._wall = _texture(1, (52, 56, 58), (112, 116, 118))
         self._shirt = _texture(2, (112, 66, 34), (190, 138, 84))
@@ -71,6 +72,8 @@ class Demo:
     def draw(self, t):
         stop = t if self.faded_at is None else min(t, self.faded_at)
         dy = 2.2 * np.sin(2 * np.pi * BPM / 60 * stop)
+        if self.lying:
+            return self._draw_lying(dy)
         frame = self._wall.copy()
         cv2.ellipse(frame, (320, 130), (54, 70), 0, 0, 360, (104, 140, 186), -1, cv2.LINE_AA)
         cv2.ellipse(frame, (320, 96), (57, 42), 0, 180, 360, (34, 38, 46), -1, cv2.LINE_AA)
@@ -86,11 +89,35 @@ class Demo:
             cv2.polylines(frame, [slab], True, (30, 34, 38), 3, cv2.LINE_AA)
         return frame
 
+    def _draw_lying(self, dy):
+        """Someone on their back, seen from the side. Only the chest rises."""
+        frame = self._wall.copy()
+        frame[250:] = self._rubble[250:]
+        cv2.line(frame, (0, 250), (SIZE[0], 250), (44, 48, 52), 3)
+        legs = np.array([[400, 262], [420, 350], [640, 372], [640, 300]])
+        cv2.fillPoly(frame, [legs], (62, 54, 48), cv2.LINE_AA)
+        shirt = cv2.warpAffine(self._shirt, np.float32([[1, 0, 0], [0, 1, dy]]), SIZE, borderMode=cv2.BORDER_REFLECT)
+        torso = np.zeros(self._torso.shape, np.uint8)
+        outline = np.array([[180, 222], [200, 345], [330, 365], [425, 352], [410, 258], [300, 205]])
+        cv2.fillPoly(torso, [outline], 1, cv2.LINE_AA)
+        frame[torso == 1] = shirt[torso == 1]
+        cv2.rectangle(frame, (150, 262), (186, 305), (94, 128, 172), -1)
+        cv2.ellipse(frame, (108, 278), (58, 46), 0, 0, 360, (104, 140, 186), -1, cv2.LINE_AA)
+        cv2.ellipse(frame, (88, 278), (42, 48), 0, 90, 270, (34, 38, 46), -1, cv2.LINE_AA)
+        if self.view == 1:  # debris hides the chest
+            slab = np.array([[140, 400], [210, 190], [470, 170], [500, 400]])
+            cv2.fillPoly(frame, [slab], (70, 78, 84), cv2.LINE_AA)
+            cv2.polylines(frame, [slab], True, (30, 34, 38), 3, cv2.LINE_AA)
+        return frame
+
     def __call__(self, frame):
         """Landmarks, as the pose finder would return them."""
         if self.view == 1:
             self.body = None
             return None
+        if self.lying:
+            self.body = Body((195.0, 280.0), 140.0, -1.4, -1.4)
+            return np.array([[200, 335], [190, 225], [400, 340], [395, 265]], float)
         self.body = Body((320.0, 235.0), 200.0, -1.4, -1.4)
         return np.array([[420, 235], [220, 235], [395, 480], [245, 480]], float)
 
