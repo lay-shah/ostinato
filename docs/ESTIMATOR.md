@@ -7,7 +7,7 @@ Everything here is synthetic. It shows how the estimator behaves on motion we ma
 1. At least 25 s of chest motion, tracked in at least 80% of frames, with no gap over 1 s.
 2. Enough motion, with no lurch that dwarfs it.
 3. The signal must not mirror the background. A curtain or fan is otherwise subtracted as camera motion and looks like breathing. Nor may it follow the background: on a faint wall, camera motion is only partly cancelled, and the rest looks like breathing. Points that scatter, as noise on a plain wall or shirt does, are not used.
-4. The head must not move with the chest by about as much. That is rocking. This check needs a head with visible detail. Nor may the chest move as much sideways, in step. That is swaying. The left and right halves of the chest must move together, unlike wind in clothing or a passing shadow. An injured chest that moves unevenly is declined too.
+4. The head must not move with the chest by about as much. That is rocking. This check needs a head with visible detail. Nor may the chest move as much sideways, in step. That is swaying. The left and right halves of the chest, and its upper and lower halves, must move together, unlike wind in clothing or a passing shadow. An injured chest that moves unevenly is declined too.
 5. Displacement and velocity must agree on a rate between 6 and 42 breaths/min, and the signal must repeat itself one breath later.
 6. Motion must not fade for about a breath anywhere in the window, so an old rate does not linger.
 7. Either the rhythm is very clear and steady, or at least four breaths can be counted from both peaks and troughs, with similar length and depth, and agree with the spectrum.
@@ -60,7 +60,7 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 
 ## Video stress test
 
-`python -m ostinato.scenes --clips 24` runs the tracker and estimator on drawn video, 24 clips per posture. A clip counts if a rate was shown at any moment after 26 s.
+`python -m ostinato.scenes --clips 24 --seed 9000` runs the tracker and estimator on drawn video, 24 clips per posture. A clip counts if a rate was shown at any moment after 26 s.
 
 | Scene | Upright | Lying |
 |---|---:|---:|
@@ -68,10 +68,10 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 | **False rates** | | |
 | Still, rocking, swaying, moving background, changing light, zoom | 0 of 144 | 0 of 144 |
 | Camera shake with a faint wall | 0 of 24 | 0 of 24 |
-| Wind rippling across clothing | 5 of 24 | **24 of 24** |
-| Passing shadow | 2 of 24 | 6 of 24 |
+| Wind rippling across clothing | **10 of 24** | **13 of 24** |
+| Passing shadow | 0 of 24 | 6 of 24 |
 
-Wind is the worst known failure, mainly when ripples run along a lying body, so both sides of the chest move together. Do not use it on someone lying in the wind.
+Wind is the worst known failure: wide ripples move the whole chest nearly together. Do not rely on a rate measured in the wind. These seeds were not used to choose the limits.
 
 ## Known weaknesses
 

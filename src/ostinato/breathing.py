@@ -245,8 +245,8 @@ def estimate(times, values, background=None, head=None, sideways=None, sides=Non
         return _decline("whole body moving")
 
     if sides is not None:
-        right, left = (companion(side) for side in zip(*sides))
-        if _splits(right, left):
+        right, left, one_end, other_end = (companion(side) for side in zip(*sides))
+        if _splits(right, left) or _splits(one_end, other_end):
             return _decline("chest moving unevenly")
     if across is not None and _sways(filtered, across):
         return _decline("whole body moving")

@@ -119,7 +119,7 @@ class ChestTracker:
         self.switched = False  # now following what may be someone else
         self.position = 0.0
         self.head = 0.0  # head motion on the same scale, while it can be seen
-        self.sides = [0.0, 0.0]  # right and left halves of the chest, on the same scale
+        self.sides = [0.0] * 4  # halves of the chest: right, left, and its two ends
         self.sideways = 0.0  # chest motion across the image, on the same scale
         self.background = 0.0  # vertical motion subtracted so far
         self.box = None
@@ -240,14 +240,17 @@ class ChestTracker:
         if np.linalg.norm(step) > MAX_STEP:
             return np.nan, "too much movement"
         self.position += float(step[1])
-        center, across = (points[0] + points[1]) / 2, points[0] - points[1]
         where, moved = self._followed
-        on_left = (where - center) @ across > 0
-        for side in (0, 1):
-            part = moved[on_left == bool(side)]
-            # With too few points on one side, it is taken to move with the rest.
-            own = np.median(part[:, 1]) if len(part) >= MIN_SIDE_POINTS else flow[1]
-            self.sides[side] += float(own - camera[1]) / width
+        across = points[0] - points[1]
+        along = np.array([-across[1], across[0]])
+        # Parts: right, left, then the two ends of the chest, split at its middle point.
+        for k, axis in enumerate((across, along)):
+            place = where @ axis
+            for side in (0, 1):
+                part = moved[(place > np.median(place)) == bool(side)]
+                # With too few points in one part, it is taken to move with the rest.
+                own = np.median(part[:, 1]) if len(part) >= MIN_SIDE_POINTS else flow[1]
+                self.sides[2 * k + side] += float(own - camera[1]) / width
         self.sideways += float(step[0])
         self.background += float(camera[1]) / width
 
