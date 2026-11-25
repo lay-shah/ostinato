@@ -21,6 +21,7 @@ FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical on
 MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
 MIN_LEAK, MAX_LEAK = 0.3, 0.5  # camera motion left in the signal: relative size, and match
 MAX_HEAD_RATIO, MIN_HEAD_MATCH = 0.85, 0.7  # head motion, relative to the chest, that means rocking
+MIN_SWAY_MATCH = 0.7  # how closely sideways motion must follow the signal to mean swaying
 # Breath counting, used when the rhythm is too uneven for the spectrum alone.
 COUNT_CONFIDENCE = 0.6  # least spectral score
 COUNT_AGREEMENT = 2.0  # breaths/min between peaks, troughs, and the spectrum
@@ -140,6 +141,16 @@ def _rocks(signal: np.ndarray, head: np.ndarray) -> bool:
     return bool(abs(np.corrcoef(signal, head)[0, 1]) > MIN_HEAD_MATCH)
 
 
+def _sways(signal: np.ndarray, across: np.ndarray) -> bool:
+    """True if the chest moves at least as much across the image, in step.
+
+    Swaying is mostly sideways, but a little of it is always vertical too.
+    """
+    if np.std(across) < np.std(signal):
+        return False
+    return bool(abs(np.corrcoef(signal, across)[0, 1]) > MIN_SWAY_MATCH)
+
+
 def _count(x: np.ndarray, rate: float) -> float | None:
     """Return breaths/min by counting, or None unless the breaths are alike."""
     swing = np.percentile(x, 90) - np.percentile(x, 10)
@@ -166,12 +177,13 @@ def _count(x: np.ndarray, rate: float) -> float | None:
     return float(counted)
 
 
-def estimate(times, values, background=None, head=None) -> Reading:
+def estimate(times, values, background=None, head=None, sideways=None) -> Reading:
     """Estimate from timestamps (s) and displacement (shoulder widths).
 
     Use NaN for frames in which the chest could not be tracked. `background` is the
     background displacement already subtracted from `values`, and `head` the
-    head displacement on the same scale, if known.
+    head displacement on the same scale, if known. `sideways` is the chest's
+    displacement across the image.
     """
     t = np.asarray(times, float)
     x = np.asarray(values, float)
@@ -209,12 +221,15 @@ def estimate(times, values, background=None, head=None) -> Reading:
     if np.abs(filtered).max() > 5 * np.median(np.abs(filtered)) + 1e-12:
         return _decline("too much movement")
 
-    behind, above = companion(background), companion(head)
+    behind, above, across = companion(background), companion(head), companion(sideways)
     if behind is not None and _mirrors(filtered, behind):
         return _decline("background moving")
     if behind is not None and _leaks(filtered, behind):
         return _decline("camera moving")
     if above is not None and _rocks(filtered, above):
+        return _decline("whole body moving")
+
+    if across is not None and _sways(filtered, across):
         return _decline("whole body moving")
 
     # Accumulated tracking error is a random walk, whose low-frequency power can
