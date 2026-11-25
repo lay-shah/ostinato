@@ -20,9 +20,10 @@ FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for f
 FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
 MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
 MIN_LEAK, MAX_LEAK = 0.3, 0.5  # camera motion left in the signal: relative size, and match
+MAX_CAMERA_RATIO = 3.0  # camera motion, relative to the signal, that cannot be removed well enough
 MAX_HEAD_RATIO, MIN_HEAD_MATCH = 0.85, 0.7  # head motion, relative to the chest, that means rocking
 MIN_SWAY_MATCH = 0.7  # how closely sideways motion must follow the signal to mean swaying
-MIN_SIDE_MATCH = 0.6  # least agreement between the halves of the chest
+MIN_SIDE_MATCH = 0.85  # least agreement between the halves of the chest
 # Breath counting, used when the rhythm is too uneven for the spectrum alone.
 COUNT_CONFIDENCE = 0.6  # least spectral score
 COUNT_AGREEMENT = 2.0  # breaths/min between peaks, troughs, and the spectrum
@@ -129,6 +130,8 @@ def _leaks(signal: np.ndarray, background: np.ndarray) -> bool:
     """
     if np.std(background) < MIN_LEAK * np.std(signal):
         return False
+    if np.std(background) > MAX_CAMERA_RATIO * np.std(signal):
+        return True
     return bool(np.corrcoef(signal, background)[0, 1] > MAX_LEAK)
 
 
