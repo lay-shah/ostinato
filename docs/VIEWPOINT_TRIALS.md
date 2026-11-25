@@ -23,8 +23,6 @@ These outcomes are assigned fixtures for checking the decision logic. The simula
 
 ## Run a paired webcam trial
 
-**Easiest:** double-click `launch/Breathing Trials.command` on a Mac, or run `python -m ostinato.trial`. It names the files, alternates the view order, says when to start and stop counting, hides estimates until the session ends, and then shows the accuracy. The steps below do the same by hand.
-
 Install the existing project dependencies using the repository README. Use a consenting healthy teammate and a separate observer. Mark two positions with measured distances. Keep the person, lighting and camera settings consistent. For repeated pairs, alternate the starting position and include a partially obscured condition. Follow the data-collection rules in [the project plan](PLAN.md).
 
 ```sh
@@ -57,3 +55,7 @@ ostinato-sim compare --scenes 10
 Replay feeds the timed samples through the same per-person assessor in recorded and reversed order. Both policies get 30 seconds per view and zero modeled travel time. Results describe an offline counterfactual using the two recorded windows. Older files contain too little evidence to replay confirmation. Replay never substitutes the manual count for an estimator reading.
 
 The simulation comparison reports mission time to a usable result averaged over people who received a rate, the unassessed fraction over all people, and time spent observing at failed views averaged over scenes. Unreachable people count as unassessed with zero observation time. Travel is excluded from failed observation time. Read the measured-only time beside the unassessed fraction: skipping hard cases can lower it. In the live app, a completed decision is labeled as a past result with its session timestamp, separate from the live camera evidence.
+
+## Guided trials
+
+Double-click `launch/Breathing Trials.command` on a Mac, or run `python -m ostinato.trial`. It names the files, alternates the view order, says when to start and stop counting, hides estimates until the session ends, and then shows the accuracy. The steps above do the same by hand.
