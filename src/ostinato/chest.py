@@ -113,7 +113,7 @@ class ChestTracker:
         self._gray = None
         self._box = None
         self._points = None
-        self._person = None  # shoulder center and scale last followed
+        self._person = None  # shoulder center, width, and scale last followed
         self._away = 0
         self.switched = False  # now following what may be someone else
         self.position = 0.0
@@ -180,15 +180,17 @@ class ChestTracker:
     def _elsewhere(self, points, scale):
         """True while the pose has jumped, so it may be someone else or a glitch."""
         center = (points[0] + points[1]) / 2
+        # Not `scale`, which changes when a tilted person counts as lying down.
+        width = float(np.linalg.norm(points[0] - points[1]))
         if self._person is not None:
-            old, size = self._person
-            near = np.linalg.norm(center - old) <= MAX_JUMP * max(size, scale)
-            if not (near and 1 / MAX_RESIZE <= scale / size <= MAX_RESIZE):
+            old, old_width, old_scale = self._person
+            near = np.linalg.norm(center - old) <= MAX_JUMP * max(old_scale, scale)
+            if not (near and 1 / MAX_RESIZE <= width / old_width <= MAX_RESIZE):
                 self._away += 1
                 if self._away < SWITCH_FRAMES:
                     return True
                 self.switched = True
-        self._person, self._away = (center, scale), 0
+        self._person, self._away = (center, width, scale), 0
         return False
 
     def _masks(self, gray, box, points):
