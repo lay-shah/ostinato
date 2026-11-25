@@ -165,7 +165,7 @@ class Mission:
     def __post_init__(self):
         if not self.bearings:
             raise ValueError("at least one viewpoint is needed")
-        self._view = 0
+        self.view = 0
         self._path = None
         self._since = self._progress = None
 
@@ -189,19 +189,19 @@ class Mission:
 
     def _go(self, t, state):
         self.state, self._since = state, t
-        self.log.append((t, state.value, self._view))
+        self.log.append((t, state.value, self.view))
 
     def _next(self, t, failed):
         """Leave this viewpoint. The assessor decides whether to try another."""
         if self.assessor is None:
             # Nothing has been measured yet, so there is no assessment to consult.
-            if self._view + 1 < len(self.bearings):
-                self._view, self._path = self._view + 1, None
+            if self.view + 1 < len(self.bearings):
+                self.view, self._path = self.view + 1, None
                 return self._go(t, State.DRIVING)
             return self._go(t, State.DONE)
         decision = self.assessor.move_failed(t) if failed else self.assessor.decision
-        if decision.action is Action.MOVE and self._view + 1 < len(self.bearings):
-            self._view, self._path = self._view + 1, None
+        if decision.action is Action.MOVE and self.view + 1 < len(self.bearings):
+            self.view, self._path = self.view + 1, None
             return self._go(t, State.DRIVING)
         return self._go(t, State.DONE)
 
@@ -227,7 +227,7 @@ class Mission:
                 self._since = t
             elif t - self._since >= SETTLE:
                 if self.assessor is None:
-                    self.assessor = Assessor(t, len(self.bearings) - 1 - self._view)
+                    self.assessor = Assessor(t, len(self.bearings) - 1 - self.view)
                 else:
                     self.assessor.arrived(t)
                 self._go(t, State.MEASURING)
@@ -242,7 +242,7 @@ class Mission:
 
     def _drive(self, t, pose, moving):
         if self._path is None:
-            self._path = ring_path(pose, self.person, self.bearings[self._view])
+            self._path = ring_path(pose, self.person, self.bearings[self.view])
             self._progress = t
         if moving:
             self._progress = t
@@ -312,8 +312,8 @@ def main():
             reading, measured = None, None
         else:
             measured = t if measured is None else measured
-            blocked = mission._view == 0 or t - measured < 25
-            reason = "chest not visible" if mission._view == 0 else "need more data"
+            blocked = mission.view == 0 or t - measured < 25
+            reason = "chest not visible" if mission.view == 0 else "need more data"
             reading = Reading(None, 0.0, reason) if blocked else Reading(15.0, 0.9, "ok")
         moving = drive != STOP
         before = len(mission.log)
