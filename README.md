@@ -18,7 +18,7 @@ To serve the browser version locally, run `python -m http.server --bind 127.0.0.
 - A simulated robot that chooses where to look next
 - A ranked map explaining why each person was prioritized
 
-Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md), the [robot build plan](docs/ROBOT.md), and the [demo guide](docs/DEMO.md).
+Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md) and the [demo guide](docs/DEMO.md).
 
 ## Setup
 
@@ -42,6 +42,10 @@ Sit still, 1 to 2 meters away, facing a fixed camera with your shoulders and che
 Video is processed on the device and never saved. The signal score is a heuristic, not a probability of being correct. Rates outside 6 to 42 breaths/min are not measured.
 
 On a Mac, you can instead double-click `Ostinato.command` or `Ostinato Demo.command` in the `launch` folder.
+
+### Measure someone lying down
+
+Put the camera at their side, level, about 0.8 m high and 1 m away, with the head, shoulders, and hips in view. A hand raised toward the ceiling counts as a response. Straight overhead does not work. Run `python -m ostinato.placement` for other positions, and `python -m ostinato.trial` to record counted breaths. This has been tested on synthetic video only. The [robot build plan](docs/ROBOT.md) uses these positions.
 
 ### Try it without a camera
 

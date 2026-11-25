@@ -62,7 +62,7 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 
 - Lying down, a hand raised toward the ceiling counts when seen from the side, up to about 40 degrees above level. From higher, or with the head or feet toward the camera, it may be missed.
 
-- Motion that rises and falls regularly within the breathing band can pass, such as steady sway or wind on clothing.
+- Motion that rises and falls regularly within the breathing band can pass, such as steady sway, rocking with the face covered, wind on clothing, or a moving shadow.
 - Irregular breathing is almost always declined.
 - A slow breather can show an old rate for several seconds after motion stops.
 - One person at a time. If the tracked position jumps to someone else the window restarts, but two people close together cannot be told apart.
