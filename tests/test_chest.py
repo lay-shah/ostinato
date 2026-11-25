@@ -395,3 +395,23 @@ def test_bobbing_camera_with_a_faint_wall_is_never_breathing():
         frame = shift(still, 0, 1.5 * np.sin(2 * np.pi * 20 / 60 * i / 10)) + rng.normal(0, 1, still.shape)
         monitor.update(np.clip(frame, 0, 255).astype(np.uint8), i / 10)
     assert monitor.reading.bpm is None
+
+
+def sway(across, up, breath=0.0):
+    """Upper body moving as one, with the head still."""
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    for i in range(280):
+        wave, slow = (np.sin(2 * np.pi * bpm / 60 * i / 10) for bpm in (16, 7))
+        dx, dy = (across * slow, breath * wave) if breath else (across * wave, up * wave)
+        frame = np.where(MASK[..., None] == 1, shift(BODY, dx, dy), BACK)
+        monitor.update(np.where(HEAD[..., None] == 1, FACE, frame), i / 10)
+    return monitor.reading
+
+
+def test_swaying_sideways_is_never_breathing():
+    reading = sway(across=3.0, up=0.5)
+    assert reading.bpm is None and reading.reason == "whole body moving"
+
+
+def test_breathing_is_measured_through_unrelated_sideways_motion():
+    assert sway(across=2.0, up=0.0, breath=2.0).bpm == pytest.approx(16, abs=1)
