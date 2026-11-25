@@ -427,3 +427,23 @@ def test_person_tilted_between_upright_and_lying_is_still_measured():
         frame = np.where(body[..., None] == 1, shift(BODY, 0, 2 * np.sin(2 * np.pi * 15 / 60 * i / 10)), BACK)
         monitor.update(np.where(head[..., None] == 1, FACE, frame), i / 10)
     assert monitor.reading.bpm == pytest.approx(15, abs=1)
+
+
+@pytest.mark.parametrize(("ripple", "measured"), [(True, False), (False, True)])
+def test_wind_rippling_across_clothing_is_never_breathing(ripple, measured):
+    y, x = np.mgrid[0:480, 0:640].astype(np.float32)
+    still = np.where(MASK[..., None] == 1, BODY, BACK)
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    for i in range(280):
+        wave = 2 * np.pi * 16 / 60 * i / 10
+        dy = MASK * 1.2 * np.sin(wave + (x / 40 if ripple else 0))
+        monitor.update(cv2.remap(still, x, (y - dy).astype(np.float32), cv2.INTER_LINEAR), i / 10)
+    assert (monitor.reading.bpm is not None) == measured
+    assert len(monitor.sides) == len(monitor.samples)
+
+
+def test_lying_chest_seen_from_too_low_is_not_used():
+    from ostinato.chest import chest_box
+
+    assert chest_box(lying(90, 0.6)[0], (480, 640)) is not None
+    assert chest_box(lying(90, 0.15)[0], (480, 640)) is None

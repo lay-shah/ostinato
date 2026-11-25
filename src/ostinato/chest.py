@@ -13,6 +13,7 @@ MAX_CAMERA_STEP = 0.03
 MAX_JUMP = 0.6  # shift of the shoulders between frames, in shoulder widths: maybe someone else
 MAX_RESIZE = 1.5
 SWITCH_FRAMES = 4  # frames a new position must hold before it is followed instead
+MIN_SIDE_POINTS = 5
 MAX_SCATTER = 1.0  # pixels from the median, for points that should move together
 FEATURE_MARGIN = 8  # pixels around a region, so that its corners are judged the same
 MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
@@ -118,6 +119,7 @@ class ChestTracker:
         self.switched = False  # now following what may be someone else
         self.position = 0.0
         self.head = 0.0  # head motion on the same scale, while it can be seen
+        self.sides = [0.0, 0.0]  # right and left halves of the chest, on the same scale
         self.sideways = 0.0  # chest motion across the image, on the same scale
         self.background = 0.0  # vertical motion subtracted so far
         self.box = None
@@ -133,7 +135,11 @@ class ChestTracker:
         return pts + np.float32([x0, y0])
 
     def _median_flows(self, gray, masks):
-        """Return the median motion in each mask, or None. All are followed at once."""
+        """Return the median motion in each mask, or None. All are followed at once.
+
+        Also keeps the first mask's points and motion, to compare parts of the chest.
+        """
+        self._followed = None
         groups = [self._features(mask) for mask in masks]
         pts = np.concatenate(groups)
         if not len(pts):
@@ -152,6 +158,8 @@ class ChestTracker:
             # On a plain surface the "corners" are camera noise, and scatter.
             if flow is not None and np.median(np.linalg.norm(good - flow, axis=1)) > MAX_SCATTER:
                 flow = None
+            if flow is not None and not flows:
+                self._followed = pts[part][keep[part]].reshape(-1, 2), good
             flows.append(flow)
         return flows
 
@@ -232,6 +240,14 @@ class ChestTracker:
         if np.linalg.norm(step) > MAX_STEP:
             return np.nan, "too much movement"
         self.position += float(step[1])
+        center, across = (points[0] + points[1]) / 2, points[0] - points[1]
+        where, moved = self._followed
+        on_left = (where - center) @ across > 0
+        for side in (0, 1):
+            part = moved[on_left == bool(side)]
+            # With too few points on one side, it is taken to move with the rest.
+            own = np.median(part[:, 1]) if len(part) >= MIN_SIDE_POINTS else flow[1]
+            self.sides[side] += float(own - camera[1]) / width
         self.sideways += float(step[0])
         self.background += float(camera[1]) / width
 
