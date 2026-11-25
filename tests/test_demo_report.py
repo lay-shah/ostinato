@@ -27,7 +27,7 @@ class Voice:
         pass
 
 
-def play_demo(monkeypatch, tmp_path, seconds, keys=()):
+def play_demo(monkeypatch, tmp_path, seconds, keys=(), option="--demo"):
     """Run the real app on the demo, on a fake clock and without a window."""
     clock, log = [0.0], []
 
@@ -46,7 +46,7 @@ def play_demo(monkeypatch, tmp_path, seconds, keys=()):
             return ord("q")
         return next((ord(k) for k, at in keys if abs(at - clock[0]) < 0.034), 255)
 
-    monkeypatch.setattr(app, "Demo", lambda: Demo(lambda: clock[0], sleep))
+    monkeypatch.setattr(app, "Demo", lambda lying=False: Demo(lambda: clock[0], sleep, lying))
     monkeypatch.setattr(app, "Speaker", Voice)
     monkeypatch.setattr(app, "compose", compose)
     monkeypatch.setattr(app.time, "monotonic", lambda: clock[0])
@@ -54,7 +54,7 @@ def play_demo(monkeypatch, tmp_path, seconds, keys=()):
         monkeypatch.setattr(cv2, name, lambda *a: None)
     monkeypatch.setattr(cv2, "getWindowProperty", lambda *a: 1)
     monkeypatch.setattr(cv2, "waitKey", key)
-    app.main(["--demo", "--reports", str(tmp_path)])
+    app.main([option, "--reports", str(tmp_path)])
     return log
 
 
@@ -71,6 +71,18 @@ def test_demo_tells_the_whole_story(monkeypatch, tmp_path):
     page = files[0].read_text()
     assert LABEL in page and "No response seen (proves nothing)" in page and "View 2" in page
     assert stat.S_IMODE(files[0].stat().st_mode) == 0o600
+
+
+def test_lying_demo_moves_on_then_measures(monkeypatch, tmp_path):
+    log = play_demo(monkeypatch, tmp_path, 62, option="--demo-lying")
+    actions = [d.action for _, d, _, _ in log]
+    assert actions.index(Action.MOVE) < actions.index(Action.REPORT)
+    assert log[-1][1].bpm == pytest.approx(BPM, abs=1)
+
+
+def test_only_one_source_can_be_chosen():
+    with pytest.raises(SystemExit):
+        app.main(["--demo", "--demo-lying"])
 
 
 def test_demo_drawing_does_not_drift():
