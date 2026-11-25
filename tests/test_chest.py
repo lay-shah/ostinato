@@ -447,3 +447,17 @@ def test_lying_chest_seen_from_too_low_is_not_used():
 
     assert chest_box(lying(90, 0.6)[0], (480, 640)) is not None
     assert chest_box(lying(90, 0.15)[0], (480, 640)) is None
+
+
+def test_chest_parts_split_both_ways():
+    """The upper and lower chest moving oppositely is not one breathing motion."""
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    lower = MASK.copy()
+    lower[:235] = 0
+    for i in range(280):
+        wave = 2 * np.sin(2 * np.pi * 16 / 60 * i / 10)
+        frame = np.where(MASK[..., None] == 1, shift(BODY, 0, wave), BACK)
+        monitor.update(np.where(lower[..., None] == 1, shift(BODY, 0, -0.6 * wave), frame), i / 10)
+    right, left, one_end, other_end = np.array(monitor.sides).T
+    assert np.corrcoef(right, left)[0, 1] > 0.8 and np.corrcoef(one_end, other_end)[0, 1] < 0
+    assert monitor.reading.bpm is None
