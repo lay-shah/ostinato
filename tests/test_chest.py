@@ -418,7 +418,7 @@ def test_breathing_is_measured_through_unrelated_sideways_motion():
 
 
 def test_person_tilted_between_upright_and_lying_is_still_measured():
-    from ostinato.chest import LYING_TILT
+    from ostinato.response import LYING_TILT
 
     rng = np.random.default_rng(1003)
     points, body, head = lying(LYING_TILT, 0.55)
