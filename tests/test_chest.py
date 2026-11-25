@@ -333,6 +333,43 @@ def test_chest_region_follows_the_body():
     assert chest_box(points + [-380, 0], (480, 640)) is None
 
 
+@pytest.fixture(scope="module")
+def pair():
+    people = [(POINTS - [320, 240]) * 0.6 + at for at in ([170, 240], [480, 240])]
+    masks = []
+    for p in people:
+        mask = np.zeros((480, 640), np.uint8)
+        (x0, y0), (x1, y1) = np.int32(p.min(0) - 18), np.int32(p.max(0) + [18, 30])
+        mask[y0:y1, x0:x1] = 1
+        masks.append(mask[..., None])
+    return people, masks
+
+
+def watch_pair(pair, who, seconds, fps=10):
+    """`who` gives the person the pose model finds at each time. Only the first breathes."""
+    people, masks = pair
+    now = [0.0]
+    monitor, shown = Monitor(ChestTracker(lambda f: people[who(now[0])])), []
+    for i in range(int(seconds * fps)):
+        t = now[0] = i / fps
+        frame = np.where(masks[0] == 1, shift(BODY, 0, 2 * np.sin(2 * np.pi * 15 / 60 * t)), BACK)
+        monitor.update(np.where(masks[1] == 1, FACE, frame), t)
+        if monitor.reading.bpm is not None:
+            shown.append(t)
+    return monitor, shown
+
+
+def test_one_persons_rate_is_never_shown_for_another(pair):
+    monitor, shown = watch_pair(pair, lambda t: int(t > 28), 30)
+    assert shown and max(shown) <= 28
+    assert monitor.reading.bpm is None and monitor.samples[0][0] > 28
+
+
+def test_brief_pose_glitches_do_not_restart_the_window(pair):
+    monitor, _ = watch_pair(pair, lambda t: int(round(t * 10) % 37 == 5), 28)
+    assert monitor.reading.bpm == pytest.approx(15, abs=1)
+
+
 def test_noise_on_a_plain_wall_or_shirt_is_not_followed():
     rng = np.random.default_rng(1001)
     plain = np.full_like(BACK, 150)
