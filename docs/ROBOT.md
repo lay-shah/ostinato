@@ -58,7 +58,9 @@ About $470-725 in total.
 
 `python -m ostinato.rover_demo`, or `launch/Rover Simulation.command` on a Mac, shows a run in a window with the real tracker and decisions on a drawn person.
 
-It has never run on a robot. It assumes the rover knows where it and the person are, which is not built, and it does not replace a switch that cuts motor power.
+`firmware/motor_guard.h` is the last check, for the motor board, and `ostinato.motors` is the computer's side of the cable. The board stops when it hears no good command for 0.5 s, ignores damaged or repeated commands, and after any stop waits for a stop command before moving again. It is tested on a computer. It still needs pin, motor, encoder, and sensor code for the board you choose.
+
+None of this has run on a robot. The drive controller assumes the rover knows where it and the person are, which is not built, and it does not replace a switch that cuts motor power.
 
 ## Still unknown
 
