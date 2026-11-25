@@ -52,6 +52,12 @@ About $470-725 in total.
 - Check that it does not tip on a 10 degree slope or when stopping suddenly, with the mast on.
 - Use healthy adults who agree to take part. This is not a medical device.
 
+## Drive software
+
+`python -m ostinato.rover` runs the drive controller on a simulated base. Every command passes through `Guard`, which limits speed, keeps 1 m from the person, stops for obstacles, and stops when the link, a sensor, or the control loop goes quiet for 0.5 s. An emergency stop holds until cleared. The mission drives around the person on a circle, stops, waits 2 s, and only then measures.
+
+It has never run on a robot. It assumes the rover knows where it and the person are, which is not built, and it does not replace a switch that cuts motor power.
+
 ## Still unknown
 
 - Breathing accuracy on people, seated or lying down
