@@ -3,16 +3,13 @@
 import cv2
 import numpy as np
 
-from .response import body_from_landmarks
+from .response import body_from_landmarks, lying_axes
 
 MIN_VISIBILITY = 0.7
 MIN_POINTS = 12
 MIN_CHEST = 0.4  # least chest height in view, in shoulder widths
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
 MAX_CAMERA_STEP = 0.03
-LYING_TILT = 40.0  # degrees between the torso and image-down
-MIN_TORSO = 0.6  # torso length needed to trust its direction, in shoulder widths
-TORSO_RATIO = 1.5  # typical torso length, in shoulder widths
 MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
 
 
@@ -61,27 +58,6 @@ def chest_box(points, shape):
     if x0 < 0 or y0 < 0 or x1 > w or y1 - y0 < MIN_CHEST * width:
         return None
     return int(x0), int(y0), int(x1), int(y1), width
-
-
-def lying_axes(points):
-    """Return (shoulder center, unit vector toward the hips, scale), or None if upright.
-
-    Seen from the side, a lying person's shoulders overlap, so the torso's length
-    sets the scale when it implies wider shoulders than can be seen.
-    """
-    if not (np.abs(points) < 1e5).all():  # also rejects NaN
-        return None
-    across = points[0] - points[1]
-    width = float(np.linalg.norm(across))
-    center = (points[0] + points[1]) / 2
-    torso = (points[2] + points[3]) / 2 - center
-    length = float(np.linalg.norm(torso))
-    if length < MIN_TORSO * width or length < 1:
-        return None
-    down = torso / length
-    if np.degrees(np.arccos(np.clip(down[1], -1, 1))) < LYING_TILT:
-        return None
-    return center, down, max(width, length / TORSO_RATIO)
 
 
 def lying_regions(points, shape):

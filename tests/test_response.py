@@ -124,6 +124,7 @@ def webcam(wrist, vis=0.97):
     pts, v = np.zeros((33, 2)), np.ones(33)
     pts[0], pts[11], pts[12] = (324, 148), (412, 252), (240, 240)
     pts[15], pts[16] = (497, 500), wrist
+    pts[23], pts[24] = (381, 502), (254, 498)
     v[15], v[16] = 0.29, vis
     return body_from_landmarks(pts, v, (640, 360))
 
@@ -148,7 +149,9 @@ def test_hand_rising_from_below_the_frame_is_a_response():
         if i == 30:
             check.ask(t)
         # Rising takes 0.6 s, during which motion blur hides the wrist.
-        body = webcam((190, 480), 0.2) if t < 5 else webcam((190, 250), 0.3) if t < 5.6 else webcam((190, 194))
+        body = (
+            webcam((190, 480), 0.2) if t < 5 else webcam((190, 250), 0.3) if t < 5.6 else webcam((190, 194))
+        )
         if check.update(t, body):
             hits.append(t)
     assert len(hits) == 1 and 6.1 < hits[0] < 6.5
@@ -214,8 +217,8 @@ def test_pre_raised_hand_does_not_mask_other_hand():
         t = step / 10
         if step == 25:
             check.ask(t)
-        left = .8 if step >= 10 else -1
-        right = .8 if step >= 30 else -1
+        left = 0.8 if step >= 10 else -1
+        right = 0.8 if step >= 30 else -1
         if check.update(t, Body((300, 200), 200, left, right)):
             hits.append(t)
     assert len(hits) == 1 and hits[0] >= 3.6
@@ -240,8 +243,8 @@ def test_pre_raised_hand_can_respond_after_being_lowered_again():
 
 
 def test_completed_raise_survives_lowering_before_speech_finishes():
-    hit, check = play(lambda t: .8 if 2.3 < t < 3.3 else -1)
-    assert hit == pytest.approx(4.0, abs=.1)
+    hit, check = play(lambda t: 0.8 if 2.3 < t < 3.3 else -1)
+    assert hit == pytest.approx(4.0, abs=0.1)
     assert check.outcome == "response"
 
 
@@ -313,3 +316,93 @@ def test_scratching_face_then_raising_properly():
         if check.update(i / 15, body(i / 15)):
             hits.append(i / 15)
     assert len(hits) == 1 and hits[0] > 7.5
+
+
+# A person lying on their back, in meters: x toward the feet, y to the side, z up.
+LYING_ARMS = {
+    "at side": (0.55, 0.12, 0.0),
+    "on belly": (0.32, -0.12, 0.15),
+    "on chest": (0.12, -0.15, 0.17),
+    "on face": (-0.22, -0.16, 0.18),
+    "to ceiling": (0.0, 0.05, 0.58),
+    "to ceiling, toward feet": (0.2, 0.0, 0.54),
+}
+
+
+def lying_view(pose, elevation, yaw=0.0, arm=15, distance=1.8, feet_left=False):
+    """Project a 3D person through a level-roll camera at the side."""
+    shoulder = {11: np.array([0, 0.19, 0.1]), 12: np.array([0, -0.19, 0.1])}
+    sign = {15: 1, 16: -1}
+    world = {
+        0: np.array([-0.24, 0, 0.2]),
+        23: np.array([0.5, 0.13, 0.1]),
+        24: np.array([0.5, -0.13, 0.1]),
+        **shoulder,
+    }
+    for wrist, s in ((15, 11), (16, 12)):
+        offset = np.array(LYING_ARMS[pose if wrist == arm else "at side"])
+        world[wrist] = shoulder[s] + offset * [1, sign[wrist], 1]
+    target = np.array([0.15, 0, 0.25])
+    e, y = np.radians(elevation), np.radians(yaw)
+    toward = np.array([np.sin(y) * np.cos(e), (1 if feet_left else -1) * np.cos(y) * np.cos(e), np.sin(e)])
+    forward = -toward
+    right = np.cross(forward, [0, 0, 1])
+    right /= np.linalg.norm(right)
+    up = np.cross(right, forward)
+    pts = np.zeros((33, 2))
+    for i, p in world.items():
+        d = p - (target + distance * toward)
+        pts[i] = 320 + 560 * (d @ right) / (d @ forward), 240 - 560 * (d @ up) / (d @ forward)
+    return body_from_landmarks(pts, np.ones(33), (640, 480))
+
+
+SIDE_VIEWS = [
+    (e, y, arm, f) for e in (15, 25, 35) for y in (-40, 0, 40) for arm in (15, 16) for f in (False, True)
+]
+
+
+def lying_height(pose, e, y, arm, feet_left):
+    body = lying_view(pose, e, y, arm, feet_left=feet_left)
+    return body.left if arm == 15 else body.right
+
+
+@pytest.mark.parametrize("pose", ["to ceiling", "to ceiling, toward feet"])
+def test_lying_hand_raised_to_the_ceiling(pose):
+    assert all(lying_height(pose, *view) >= response.RAISED for view in SIDE_VIEWS)
+
+
+@pytest.mark.parametrize("pose", ["at side", "on belly", "on chest", "on face"])
+def test_lying_hand_on_the_body_is_not_raised(pose):
+    views = SIDE_VIEWS + [
+        (e, y, arm, f) for e in (60, 75) for y in (-40, 0, 40) for arm in (15, 16) for f in (False, True)
+    ]
+    assert all(lying_height(pose, *view) < response.RAISED for view in views)
+
+
+def test_lying_hand_past_the_head_still_counts(monkeypatch):
+    monkeypatch.setitem(LYING_ARMS, "overhead", (-0.58, 0.1, 0.0))
+    assert all(lying_height("overhead", *view) >= response.RAISED for view in SIDE_VIEWS if view[1] == 0)
+
+
+def test_lying_raise_is_a_response_and_a_lying_face_touch_is_not():
+    for pose, expected in (("to ceiling", "response"), ("on face", "none seen")):
+        check = ResponseCheck(Quiet())
+        for i in range(300):
+            t = i / 15
+            if i == 30:
+                check.ask(t)
+            check.update(t, lying_view(pose if t > 6 else "at side", 30))
+        assert check.outcome == expected
+
+
+def test_lying_hand_that_cannot_be_seen_is_not_raised():
+    pts = np.zeros((33, 2))
+    pts[0], pts[11], pts[12] = (430, 240), (380, 280), (380, 200)
+    pts[23], pts[24] = (200, 270), (200, 210)
+    pts[15], pts[16] = (370, 80), (200, 180)
+    vis = np.ones(33)
+    assert body_from_landmarks(pts, vis, (640, 480)).left > response.RAISED
+    vis[15] = 0.5
+    assert body_from_landmarks(pts, vis, (640, 480)).left is None
+    vis[15], pts[15] = 1, (370, -20)
+    assert body_from_landmarks(pts, vis, (640, 480)).left is None

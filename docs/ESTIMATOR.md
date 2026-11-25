@@ -60,7 +60,7 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 
 ## Known weaknesses
 
-- Raising a hand toward the ceiling while lying down may not count as a response.
+- Lying down, a hand raised toward the ceiling counts when seen from the side, up to about 40 degrees above level. From higher, or with the head or feet toward the camera, it may be missed.
 
 - Motion that rises and falls regularly within the breathing band can pass, such as steady sway or wind on clothing.
 - Irregular breathing is almost always declined.
