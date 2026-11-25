@@ -58,6 +58,21 @@ On 24 synthetic clips per row, with the torso at 50-180 degrees:
 
 These are drawn textures with given landmarks. Nobody lying down has been measured.
 
+## Video stress test
+
+`python -m ostinato.scenes --clips 24` runs the tracker and estimator on drawn video, 24 clips per posture. A clip counts if a rate was shown at any moment after 26 s.
+
+| Scene | Upright | Lying |
+|---|---:|---:|
+| Breathing, still or with camera shake or sideways sway: given a rate | 72 of 72 | 72 of 72 |
+| **False rates** | | |
+| Still, rocking, swaying, moving background, changing light, zoom | 0 of 144 | 0 of 144 |
+| Camera shake with a faint wall | 0 of 24 | 0 of 24 |
+| Wind rippling across clothing | 5 of 24 | **24 of 24** |
+| Passing shadow | 2 of 24 | 6 of 24 |
+
+Wind is the worst known failure, mainly when ripples run along a lying body, so both sides of the chest move together. Do not use it on someone lying in the wind.
+
 ## Known weaknesses
 
 - Lying down, a hand raised toward the ceiling counts when seen from the side, up to about 40 degrees above level. From higher, or with the head or feet toward the camera, it may be missed.
