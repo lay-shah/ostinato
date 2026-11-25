@@ -56,6 +56,8 @@ About $470-725 in total.
 
 `python -m ostinato.rover` runs the drive controller on a simulated base. Every command passes through `Guard`, which limits speed, keeps 1 m from the person, stops for obstacles, and stops when the link, a sensor, or the control loop goes quiet for 0.5 s. An emergency stop holds until cleared. The mission drives around the person on a circle, stops, waits 2 s, and only then measures.
 
+`python -m ostinato.rover_demo`, or `launch/Rover Simulation.command` on a Mac, shows a run in a window with the real tracker and decisions on a drawn person.
+
 It has never run on a robot. It assumes the rover knows where it and the person are, which is not built, and it does not replace a switch that cuts motor power.
 
 ## Still unknown

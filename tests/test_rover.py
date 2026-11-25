@@ -118,7 +118,7 @@ def simulate(
         if cut is None or not cut[0] <= t <= cut[1]:
             base.tell(guard, t)
         measuring = mission.state is State.MEASURING
-        want = mission.update(t, base.pose, drive != STOP, reading(mission._view, t) if measuring else None)
+        want = mission.update(t, base.pose, drive != STOP, reading(mission.view, t) if measuring else None)
         drive = guard.allow(t, want)
         assert abs(drive.speed) <= MAX_SPEED and abs(drive.turn) <= rover.MAX_TURN
         if measuring or mission.state is State.SETTLING:
@@ -141,7 +141,7 @@ def test_reaches_a_view_and_reports_without_coming_close(seed):
 
 def test_failed_views_lead_to_the_next_and_then_to_help():
     mission, closest, _ = simulate(2030, reading=lambda view, t: GOOD if view == 2 else NONE)
-    assert mission.outcome == "15.0 breaths/min" and mission._view == 2 and closest >= KEEP_OUT
+    assert mission.outcome == "15.0 breaths/min" and mission.view == 2 and closest >= KEEP_OUT
     mission, _, _ = simulate(2031, reading=lambda view, t: NONE)
     assert mission.outcome.startswith("unable to assess") and mission.outcome.endswith("a person must check")
 
