@@ -10,6 +10,7 @@ MIN_POINTS = 12
 MIN_CHEST = 0.4  # least chest height in view, in shoulder widths
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
 MAX_CAMERA_STEP = 0.03
+FEATURE_MARGIN = 8  # pixels around a region, so that its corners are judged the same
 MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
 
 
@@ -113,19 +114,34 @@ class ChestTracker:
         self.background = 0.0  # vertical motion subtracted so far
         self.box = None
 
-    def _median_flow(self, gray, mask):
-        pts = cv2.goodFeaturesToTrack(self._gray, 120, 0.01, 5, mask=mask)
+    def _features(self, mask):
+        """Corners to follow in the previous frame. Only the mask's surroundings are searched."""
+        x, y, w, h = cv2.boundingRect(mask)
+        x0, y0 = max(0, x - FEATURE_MARGIN), max(0, y - FEATURE_MARGIN)
+        area = np.s_[y0 : y + h + FEATURE_MARGIN, x0 : x + w + FEATURE_MARGIN]
+        pts = cv2.goodFeaturesToTrack(self._gray[area], 120, 0.01, 5, mask=mask[area]) if w else None
         if pts is None or len(pts) < MIN_POINTS:
-            return None
+            return np.empty((0, 1, 2), np.float32)
+        return pts + np.float32([x0, y0])
+
+    def _median_flows(self, gray, masks):
+        """Return the median motion in each mask, or None. All are followed at once."""
+        groups = [self._features(mask) for mask in masks]
+        pts = np.concatenate(groups)
+        if not len(pts):
+            return [None] * len(masks)
         nxt, ok, _ = cv2.calcOpticalFlowPyrLK(self._gray, gray, pts, None)
-        if nxt is None:
-            return None
         back, ok2, _ = cv2.calcOpticalFlowPyrLK(gray, self._gray, nxt, None)
         error = np.linalg.norm((back - pts).reshape(-1, 2), axis=1)
         keep = (ok.ravel() == 1) & (ok2.ravel() == 1) & (error < 0.5)
-        if keep.sum() < MIN_POINTS:
-            return None
-        return np.median((nxt - pts).reshape(-1, 2)[keep], axis=0)
+        moved = (nxt - pts).reshape(-1, 2)
+        flows, start = [], 0
+        for group in groups:
+            part = slice(start, start + len(group))
+            start += len(group)
+            good = moved[part][keep[part]]
+            flows.append(np.median(good, axis=0) if len(good) >= MIN_POINTS else None)
+        return flows
 
     def update(self, bgr):
         """Return (displacement or NaN, reason)."""
@@ -169,11 +185,9 @@ class ChestTracker:
 
     def _measure(self, gray, box, points):
         width = box[4]
-        chest, background, head_mask = self._masks(gray, box, points)
-        flow = self._median_flow(gray, chest)
+        flow, camera, head = self._median_flows(gray, self._masks(gray, box, points))
         if flow is None:
             return np.nan, "not enough chest detail"
-        camera = self._median_flow(gray, background)
         if camera is None:
             return np.nan, "cannot check camera motion"
         if np.linalg.norm(camera) / width > MAX_CAMERA_STEP:
@@ -187,7 +201,6 @@ class ChestTracker:
         self.position += float(step[1])
         self.background += float(camera[1]) / width
 
-        head = self._median_flow(gray, head_mask)
         if head is not None:
             self.head += float(head[1] - camera[1]) / width
         return self.position, "ok"
