@@ -20,17 +20,84 @@ DOWN_SECONDS = 0.5  # a hand must first be seen down for this long
 HOLD_SECONDS = 0.6  # and then be held up for this long
 LISTEN_SECONDS = 10.0
 MAX_GAP = 1.0  # seconds without a view of the arm before its history is dropped
+LYING_TILT = 40.0  # degrees between the torso and image-down
+MIN_TORSO = 0.6  # torso length needed to trust its direction, in shoulder widths
+TORSO_RATIO = 1.5  # typical torso length, in shoulder widths
+MIN_LIFT = 1.1  # wrist above its own shoulder, for a hand raised from lying down
+RESTING_LIFT = 0.3
+PAST_HEAD = 1.1  # toward the head, for a hand raised along the ground
 MAX_JUMP = 0.5  # body shift between frames, in shoulder widths: maybe someone else
 
 
 @dataclass(frozen=True)
 class Body:
-    """Shoulder center and width in pixels, and each wrist's height toward the head."""
+    """Shoulder center and width in pixels, and each wrist's height: toward the head, or off the
+    ground if lying down."""
 
     center: tuple[float, float]
     width: float
     left: float | None  # shoulder widths; None if the wrist cannot be seen
     right: float | None
+
+
+def lying_axes(points):
+    """Return (shoulder center, unit vector toward the hips, scale), or None if upright.
+
+    Seen from the side, a lying person's shoulders overlap, so the torso's length
+    sets the scale when it implies wider shoulders than can be seen.
+    """
+    if not (np.abs(points) < 1e5).all():  # also rejects NaN
+        return None
+    across = points[0] - points[1]
+    width = float(np.linalg.norm(across))
+    center = (points[0] + points[1]) / 2
+    torso = (points[2] + points[3]) / 2 - center
+    length = float(np.linalg.norm(torso))
+    if length < MIN_TORSO * width or length < 1:
+        return None
+    down = torso / length
+    if np.degrees(np.arccos(np.clip(down[1], -1, 1))) < LYING_TILT:
+        return None
+    return center, down, max(width, length / TORSO_RATIO)
+
+
+def _lying_body(points, visibility, size):
+    """As `body_from_landmarks`, for a person lying across the image, or None.
+
+    They may raise a hand past the head, or off the ground. Motion along the body is
+    left out of the second, so an arm resting beside the body is never "raised".
+    """
+    if not min(visibility[i] for i in (23, 24)) >= MIN_VISIBILITY:
+        return None
+    axes = lying_axes(np.array([points[i] for i in (11, 12, 23, 24)], float))
+    if axes is None:
+        return None
+    center, down, scale = axes
+    nose = np.asarray(points[0], float) - center
+    if scale < 60 or not -(nose @ down) >= 0.15 * scale:
+        return None
+    side = np.array([-down[1], down[0]])
+    side = side if side[1] < 0 else -side  # image-up, across the body
+
+    def height(wrist, shoulder):
+        x, y = points[wrist]
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return None
+        point = np.array([x, y], float)
+        inside = 0 <= x < size[0] and 0 <= y < size[1]
+        value = -float((point - center) @ down) / scale
+        lift = float((point - np.asarray(points[shoulder], float)) @ side) / scale
+        if 0 < value < PAST_HEAD:
+            value = 0.0  # perhaps touching the face, which rises off the ground too
+        if lift >= MIN_LIFT:
+            value = max(value, lift)
+        elif lift > RESTING_LIFT:
+            value = max(value, 0.0)  # neither raised nor down
+        if inside:
+            return value if visibility[wrist] >= MIN_VISIBILITY else None
+        return value if value <= LOWERED else None
+
+    return Body((float(center[0]), float(center[1])), scale, height(15, 11), height(16, 12))
 
 
 def body_from_landmarks(points, visibility, size):
@@ -42,6 +109,9 @@ def body_from_landmarks(points, visibility, size):
     """
     if not min(visibility[i] for i in (0, 11, 12)) >= MIN_VISIBILITY:
         return None
+    lying = _lying_body(points, visibility, size)
+    if lying is not None:
+        return lying
     nose, left, right = (np.asarray(points[i], float) for i in (0, 11, 12))
     center, across = (left + right) / 2, left - right
     width = float(np.linalg.norm(across))
