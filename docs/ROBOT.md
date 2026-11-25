@@ -1,0 +1,60 @@
+# Robot build plan
+
+A new rover that drives to one person, **stops**, and measures from a camera on a mast. Nothing here has been built. Prices are rough, from November 2026 listings or estimates; check them before buying.
+
+## Build in this order
+
+| Step | Done when | Cost |
+|---|---|---|
+| 1. Camera position | Counted-breath trials on people lying down, at several heights and distances, show where a rate is given and how far off it is | $0 |
+| 2. Computer | `python -m ostinato.speed --image photo.jpg` gives 10 frames/s or more on it | borrow first |
+| 3. Mast | Camera stays still within 2 s of stopping | $30-50 |
+| 4. Remote-controlled rover | Drives, stops 1 m away, measures, moves to a second view | $200-400 |
+| 5. Autonomy | Goes between marked viewpoints and stops for obstacles | $0-50 |
+
+Do not buy the rover before step 1 works.
+
+## Where to put the camera
+
+`python -m ostinato.placement` calculates which side views are worth trying, assuming a 5 mm chest rise and a 70 degree camera.
+
+| Lens height | Distance along the ground | Angle | Chest motion |
+|---|---|---:|---:|
+| 0.6 m | 0.8-1.25 m | 18-27 degrees | 1.7-2.3 px |
+| **0.8 m** | **0.8-1.5 m** | **22-37 degrees** | **1.3-1.8 px** |
+| 1.0 m | 1.0-1.5 m | 28-39 degrees | 1.2-1.4 px |
+
+Start with a 0.8 m mast. It leaves the widest range of distances, and a 1 m gap keeps the rover clear of the person. Lower, the shoulders overlap. Higher, the chest mostly moves toward the camera and a raised hand may be missed. Keep the camera level from side to side: only motion up and down the image is measured.
+
+These are calculations. Real chest motion varies by person, clothing, and position, and can be smaller than 5 mm.
+
+## Parts
+
+| Part | Requirement | Rough cost |
+|---|---|---:|
+| Computer | 10 frames/s in the speed test; Raspberry Pi 5 8 GB is a candidate, not yet tested | $175-200 |
+| Chassis | Four wheels, encoders, about 3 kg payload; wide enough that a 0.8 m mast does not tip | $90-200 |
+| Motor driver, distance sensors | Stops on loss of signal | $30-50 |
+| Camera | 70 degrees across, 720p, fixed focus | $25-40 |
+| Mast and pan-tilt | Stiff tube; 3D-printed mounts | $30-50 |
+| Speaker | Heard at 2 m | $10-15 |
+| Power | Battery with protection, fuse, separate supplies for motors and computer, emergency stop | $70-110 |
+| Storage, cooling, wiring | | $40-60 |
+
+About $470-725 in total.
+
+## Safety rules
+
+- A person holds the emergency stop whenever the motors have power.
+- Slower than 0.3 m/s near people. Stop at least 1 m away. Never drive over or behind someone.
+- Motors stop if the computer, radio, or a sensor goes quiet for 0.5 s.
+- Never measure while moving.
+- Check that it does not tip on a 10 degree slope or when stopping suddenly, with the mast on.
+- Use healthy adults who agree to take part. This is not a medical device.
+
+## Still unknown
+
+- Breathing accuracy on people, seated or lying down
+- Whether blankets, thick clothing, or injuries hide chest motion
+- Frame rate on the robot's computer
+- How long the mast shakes after stopping
