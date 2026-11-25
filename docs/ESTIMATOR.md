@@ -65,4 +65,4 @@ These are drawn textures with given landmarks. Nobody lying down has been measur
 - Motion that rises and falls regularly within the breathing band can pass, such as steady sway or wind on clothing.
 - Irregular breathing is almost always declined.
 - A slow breather can show an old rate for several seconds after motion stops.
-- One person only. The app cannot tell whose chest or hand it is seeing.
+- One person at a time. If the tracked position jumps to someone else the window restarts, but two people close together cannot be told apart.

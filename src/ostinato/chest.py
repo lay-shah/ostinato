@@ -10,6 +10,9 @@ MIN_POINTS = 12
 MIN_CHEST = 0.4  # least chest height in view, in shoulder widths
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
 MAX_CAMERA_STEP = 0.03
+MAX_JUMP = 0.6  # shift of the shoulders between frames, in shoulder widths: maybe someone else
+MAX_RESIZE = 1.5
+SWITCH_FRAMES = 4  # frames a new position must hold before it is followed instead
 FEATURE_MARGIN = 8  # pixels around a region, so that its corners are judged the same
 MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
 
@@ -109,6 +112,9 @@ class ChestTracker:
         self._gray = None
         self._box = None
         self._points = None
+        self._person = None  # shoulder center and scale last followed
+        self._away = 0
+        self.switched = False  # now following what may be someone else
         self.position = 0.0
         self.head = 0.0  # head motion on the same scale, while it can be seen
         self.background = 0.0  # vertical motion subtracted so far
@@ -147,9 +153,14 @@ class ChestTracker:
         """Return (displacement or NaN, reason)."""
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
         points = self.finder(bgr)
+        self.switched = False
+        if self._gray is not None and self._gray.shape != gray.shape:
+            self._person = None
         box = chest_box(points, bgr.shape) if points is not None else None
         if self._gray is not None and self._gray.shape != gray.shape:
             self._gray = self._box = None  # the camera changed resolution
+        if box is not None and self._elsewhere(points, box[4]):
+            box = None
         prev_box = self._box
         value, reason = np.nan, "chest not visible"
         if box is not None and prev_box is not None:
@@ -159,6 +170,20 @@ class ChestTracker:
         self._gray, self._box, self.box = gray, box, box
         self._points = points
         return value, reason
+
+    def _elsewhere(self, points, scale):
+        """True while the pose has jumped, so it may be someone else or a glitch."""
+        center = (points[0] + points[1]) / 2
+        if self._person is not None:
+            old, size = self._person
+            near = np.linalg.norm(center - old) <= MAX_JUMP * max(size, scale)
+            if not (near and 1 / MAX_RESIZE <= scale / size <= MAX_RESIZE):
+                self._away += 1
+                if self._away < SWITCH_FRAMES:
+                    return True
+                self.switched = True
+        self._person, self._away = (center, scale), 0
+        return False
 
     def _masks(self, gray, box, points):
         """Return masks for the chest, the background, and the head."""

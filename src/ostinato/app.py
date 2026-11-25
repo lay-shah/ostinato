@@ -49,10 +49,13 @@ class Monitor:
         self._last_estimate = -np.inf
 
     def reset(self, reason="need more data"):
+        self.tracker.reset()
+        self._forget(reason)
+
+    def _forget(self, reason):
         self.samples.clear()
         self.background.clear()
         self.head.clear()
-        self.tracker.reset()
         self.reading = Reading(None, 0.0, reason)
         self._last_estimate = -np.inf
 
@@ -60,6 +63,9 @@ class Monitor:
         if self.samples and t - self.samples[-1][0] > 1.0:
             self.reset("stream interrupted")  # old and new do not join up
         value, self.tracking = self.tracker.update(frame)
+        if getattr(self.tracker, "switched", False):
+            # Readings of one person must never be shown for another.
+            self._forget("need more data")
         self.samples.append((t, value))
         self.background.append(self.tracker.background)
         self.head.append(self.tracker.head)
