@@ -368,3 +368,30 @@ def test_one_persons_rate_is_never_shown_for_another(pair):
 def test_brief_pose_glitches_do_not_restart_the_window(pair):
     monitor, _ = watch_pair(pair, lambda t: int(round(t * 10) % 37 == 5), 28)
     assert monitor.reading.bpm == pytest.approx(15, abs=1)
+
+
+def test_noise_on_a_plain_wall_or_shirt_is_not_followed():
+    rng = np.random.default_rng(1001)
+    plain = np.full_like(BACK, 150)
+    for body, back, reason in (
+        (BODY, plain, "cannot check camera motion"),
+        (plain, BACK, "not enough chest detail"),
+    ):
+        monitor = Monitor(ChestTracker(lambda f: POINTS))
+        for i in range(40):
+            frame = np.where(MASK[..., None] == 1, body, back) + rng.normal(0, 4, BACK.shape)
+            monitor.update(np.clip(frame, 0, 255).astype(np.uint8), i / 10)
+            assert i == 0 or monitor.tracking == reason
+
+
+def test_bobbing_camera_with_a_faint_wall_is_never_breathing():
+    """Only part of the camera motion can be measured, and the rest once gave a rate."""
+    rng = np.random.default_rng(1002)
+    faint = np.clip(150 + (BACK.astype(float) - 128) * 0.06, 0, 255).astype(np.uint8)
+    still = np.where(MASK[..., None] == 1, BODY, faint)
+    still = np.where(HEAD[..., None] == 1, np.full_like(BACK, 120), still)  # no detail on the face
+    monitor = Monitor(ChestTracker(lambda f: POINTS))
+    for i in range(280):
+        frame = shift(still, 0, 1.5 * np.sin(2 * np.pi * 20 / 60 * i / 10)) + rng.normal(0, 1, still.shape)
+        monitor.update(np.clip(frame, 0, 255).astype(np.uint8), i / 10)
+    assert monitor.reading.bpm is None

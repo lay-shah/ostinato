@@ -13,6 +13,7 @@ MAX_CAMERA_STEP = 0.03
 MAX_JUMP = 0.6  # shift of the shoulders between frames, in shoulder widths: maybe someone else
 MAX_RESIZE = 1.5
 SWITCH_FRAMES = 4  # frames a new position must hold before it is followed instead
+MAX_SCATTER = 1.0  # pixels from the median, for points that should move together
 FEATURE_MARGIN = 8  # pixels around a region, so that its corners are judged the same
 MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
 
@@ -146,7 +147,11 @@ class ChestTracker:
             part = slice(start, start + len(group))
             start += len(group)
             good = moved[part][keep[part]]
-            flows.append(np.median(good, axis=0) if len(good) >= MIN_POINTS else None)
+            flow = np.median(good, axis=0) if len(good) >= MIN_POINTS else None
+            # On a plain surface the "corners" are camera noise, and scatter.
+            if flow is not None and np.median(np.linalg.norm(good - flow, axis=1)) > MAX_SCATTER:
+                flow = None
+            flows.append(flow)
         return flows
 
     def update(self, bgr):

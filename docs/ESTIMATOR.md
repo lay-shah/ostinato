@@ -6,7 +6,7 @@ Everything here is synthetic. It shows how the estimator behaves on motion we ma
 
 1. At least 25 s of chest motion, tracked in at least 80% of frames, with no gap over 1 s.
 2. Enough motion, with no lurch that dwarfs it.
-3. The signal must not mirror the background. A curtain or fan is otherwise subtracted as camera motion and looks like breathing.
+3. The signal must not mirror the background. A curtain or fan is otherwise subtracted as camera motion and looks like breathing. Nor may it follow the background: on a faint wall, camera motion is only partly cancelled, and the rest looks like breathing. Points that scatter, as noise on a plain wall or shirt does, are not used.
 4. The head must not move with the chest by about as much. That is rocking. This check needs a visible head.
 5. Displacement and velocity must agree on a rate between 6 and 42 breaths/min, and the signal must repeat itself one breath later.
 6. Motion must not fade for about a breath anywhere in the window, so an old rate does not linger.
