@@ -43,6 +43,8 @@ These are calculations. Real chest motion varies by person, clothing, and positi
 
 About $470-725 in total.
 
+`python -m ostinato.tipping` calculates how far apart the wheels must be. With guessed part masses and a 0.8 m mast, about 27 cm both ways, decided by a sudden stop going down a 10 degree slope. Weigh the parts and run it again with `--part` before choosing a chassis. Keep the battery low.
+
 ## Safety rules
 
 - A person holds the emergency stop whenever the motors have power.
