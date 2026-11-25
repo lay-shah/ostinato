@@ -18,7 +18,7 @@ To serve the browser version locally, run `python -m http.server --bind 127.0.0.
 - A simulated robot that chooses where to look next
 - A ranked map explaining why each person was prioritized
 
-Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md) and the [demo guide](docs/DEMO.md).
+Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md), the [robot build plan](docs/ROBOT.md), and the [demo guide](docs/DEMO.md).
 
 ## Setup
 
