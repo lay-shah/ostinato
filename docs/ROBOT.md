@@ -60,7 +60,13 @@ About $470-725 in total.
 
 `python -m ostinato.rover_demo`, or `launch/Rover Simulation.command` on a Mac, shows a run in a window with the real tracker and decisions on a drawn person.
 
-It has never run on a robot. It assumes the rover knows where it and the person are, which is not built, and it does not replace a switch that cuts motor power.
+It has never run on a robot, and it does not replace a switch that cuts motor power.
+
+## Knowing where it is
+
+`ostinato.localize` combines the wheel encoders with printed markers that the same camera sees. Print them with `python -m ostinato.localize --print 1 2 3 4`, tape them upright, and measure where each one and the person are. It tracks its own uncertainty. When that passes 0.15 m, or the markers contradict it, the guard hears nothing more and the rover stops.
+
+In simulation it reached its viewpoint in 99 of 100 drives and never came within 1.1 m of the person. With every marker hidden it stopped in 100 of 100. Simulated wheels and sightings are kinder than real ones. A person still has to place it at the start and measure where the casualty is: it does not find people by itself.
 
 ## Still unknown
 
