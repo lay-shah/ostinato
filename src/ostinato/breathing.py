@@ -19,6 +19,7 @@ MIN_RMS = 2e-4  # smallest usable motion, in shoulder widths
 FADE_PERIODS, MIN_FADE_SECONDS = 0.9, 2.5  # length of the stretch checked for faded motion
 FADE_RATIO = 0.4  # least motion in any such stretch, relative to the typical one
 MAX_MIRRORING = 0.4  # how far the signal may be explained by background motion
+MIN_LEAK, MAX_LEAK = 0.3, 0.5  # camera motion left in the signal: relative size, and match
 MAX_HEAD_RATIO, MIN_HEAD_MATCH = 0.85, 0.7  # head motion, relative to the chest, that means rocking
 # Breath counting, used when the rhythm is too uneven for the spectrum alone.
 COUNT_CONFIDENCE = 0.6  # least spectral score
@@ -118,6 +119,17 @@ def _mirrors(signal: np.ndarray, background: np.ndarray) -> bool:
     return bool(np.corrcoef(signal, background)[0, 1] < -MAX_MIRRORING)
 
 
+def _leaks(signal: np.ndarray, background: np.ndarray) -> bool:
+    """True if the signal follows the camera motion that was subtracted.
+
+    On a faint background, camera motion is underestimated and only part of it is
+    removed. What is left moves the same way, and can look like breathing.
+    """
+    if np.std(background) < MIN_LEAK * np.std(signal):
+        return False
+    return bool(np.corrcoef(signal, background)[0, 1] > MAX_LEAK)
+
+
 def _rocks(signal: np.ndarray, head: np.ndarray) -> bool:
     """True if the head moves with the chest, and about as much.
 
@@ -200,6 +212,8 @@ def estimate(times, values, background=None, head=None) -> Reading:
     behind, above = companion(background), companion(head)
     if behind is not None and _mirrors(filtered, behind):
         return _decline("background moving")
+    if behind is not None and _leaks(filtered, behind):
+        return _decline("camera moving")
     if above is not None and _rocks(filtered, above):
         return _decline("whole body moving")
 
