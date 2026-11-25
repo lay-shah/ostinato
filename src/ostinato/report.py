@@ -4,6 +4,9 @@ import os
 from datetime import datetime
 from html import escape
 from pathlib import Path
+from statistics import median
+
+from .breathing import MIN_SECONDS
 
 CSS = """
 :root{--bg:#f3f5f7;--card:#fff;--ink:#16202a;--dim:#55616b;--line:#d3dadd;--ok:#1f6b3c;--warn:#9a4a00}
@@ -80,6 +83,27 @@ def _chart(readings):
     return "".join(parts)
 
 
+def _rate_note(recorder):
+    """Explain a result without a rate, or mention one that was seen anyway."""
+    if recorder.decision.bpm is not None:
+        return ""
+    rates = [bpm for _, bpm, _ in recorder.readings if bpm is not None]
+    if rates:
+        spread = f", from {min(rates):.0f} to {max(rates):.0f}" if max(rates) - min(rates) >= 1 else ""
+        text = (
+            f"A live breathing rate was shown in {len(rates)} one-second checks: typically {median(rates):.1f} "
+            f"breaths/min{spread}. It was not part of the decision."
+        )
+    elif recorder.readings[-1][0] < MIN_SECONDS:
+        text = (
+            f"No breathing rate: it needs at least {MIN_SECONDS:.0f} seconds of clear video, and this record covers "
+            f"{recorder.readings[-1][0]:.0f}. To measure one, keep still and watch for longer before saving."
+        )
+    else:
+        return ""
+    return f"<p>{text}</p>"
+
+
 def render(recorder, when):
     d = recorder.decision
     if d is None or not recorder.readings:
@@ -113,6 +137,7 @@ def render(recorder, when):
         f"<title>Ostinato assessment</title><style>{CSS}</style></head><body><main>{label}"
         f'<p class="dim">Ostinato assessment, {escape(when)}</p><h1 class="{css}">{escape(headline)}</h1>'
         f"<p>When saved, the live reading was: {escape(now)}.</p>"
+        f"{_rate_note(recorder)}"
         "<p class='dim'>Research prototype, not a medical device. A missing rate or response says nothing about whether "
         "the person is breathing. Not validated against counted breaths.</p>"
         f"<h2>Rate over time</h2><div class='box'>{_chart(recorder.readings)}"

@@ -23,6 +23,8 @@ These outcomes are assigned fixtures for checking the decision logic. The simula
 
 ## Run a paired webcam trial
 
+**Easiest:** double-click `launch/Breathing Trials.command` on a Mac, or run `python -m ostinato.trial`. It names the files, alternates the view order, says when to start and stop counting, hides estimates until the session ends, and then shows the accuracy. The steps below do the same by hand.
+
 Install the existing project dependencies using the repository README. Use a consenting healthy teammate and a separate observer. Mark two positions with measured distances. Keep the person, lighting and camera settings consistent. For repeated pairs, alternate the starting position and include a partially obscured condition. Follow the data-collection rules in [the project plan](PLAN.md).
 
 ```sh
