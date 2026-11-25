@@ -92,11 +92,12 @@ def main(argv=None):
     parser.add_argument("--no-prompt", action="store_true", help="do not ask for a response on its own")
     parser.add_argument("--video", help="analyze a local video instead of the camera")
     parser.add_argument("--demo", action="store_true", help="show a synthetic scene, without a camera")
+    parser.add_argument("--demo-lying", action="store_true", help="as --demo, with the person lying down")
     parser.add_argument("--reports", default="data", help="folder for reports saved with S (default: data)")
     args = parser.parse_args(argv)
-    if args.demo and args.video:
-        parser.error("choose --demo or --video")
-    demo = Demo() if args.demo else None
+    if args.demo + args.demo_lying + bool(args.video) > 1:
+        parser.error("choose one of --demo, --demo-lying, and --video")
+    demo = Demo(lying=args.demo_lying) if args.demo or args.demo_lying else None
 
     try:
         cap = demo or (cv2.VideoCapture(args.video) if args.video else open_camera(args.camera))

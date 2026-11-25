@@ -2,7 +2,7 @@
 
 ## One-minute version, no camera
 
-Run `ostinato --demo`, or double-click `launch/Ostinato Demo.command` on a Mac. Turn the volume up.
+Run `ostinato --demo`, or double-click `launch/Ostinato Demo.command` on a Mac. Turn the volume up. `ostinato --demo-lying` shows the same story with the person lying down.
 
 | About when | On screen | Say |
 |---|---|---|
