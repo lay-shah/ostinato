@@ -10,6 +10,10 @@ MIN_POINTS = 12
 MIN_CHEST = 0.4  # least chest height in view, in shoulder widths
 MAX_STEP = 0.08  # chest motion per frame, in shoulder widths
 MAX_CAMERA_STEP = 0.03
+LYING_TILT = 40.0  # degrees between the torso and image-down
+MIN_TORSO = 0.6  # torso length needed to trust its direction, in shoulder widths
+TORSO_RATIO = 1.5  # typical torso length, in shoulder widths
+MIN_IN_FRAME = 0.6  # share of a lying person's chest that must be in view
 
 
 class PoseFinder:
@@ -44,6 +48,8 @@ def chest_box(points, shape):
     if not np.isfinite(points[:2]).all():
         return None
     h, w = shape[:2]
+    if lying_axes(points) is not None:
+        return lying_box(points, shape)
     left, right = points[0], points[1]
     width = float(np.linalg.norm(left - right))
     if width < 60:  # too distant or side-on to measure
@@ -57,6 +63,64 @@ def chest_box(points, shape):
     return int(x0), int(y0), int(x1), int(y1), width
 
 
+def lying_axes(points):
+    """Return (shoulder center, unit vector toward the hips, scale), or None if upright.
+
+    Seen from the side, a lying person's shoulders overlap, so the torso's length
+    sets the scale when it implies wider shoulders than can be seen.
+    """
+    if not (np.abs(points) < 1e5).all():  # also rejects NaN
+        return None
+    across = points[0] - points[1]
+    width = float(np.linalg.norm(across))
+    center = (points[0] + points[1]) / 2
+    torso = (points[2] + points[3]) / 2 - center
+    length = float(np.linalg.norm(torso))
+    if length < MIN_TORSO * width or length < 1:
+        return None
+    down = torso / length
+    if np.degrees(np.arccos(np.clip(down[1], -1, 1))) < LYING_TILT:
+        return None
+    return center, down, max(width, length / TORSO_RATIO)
+
+
+def lying_regions(points, shape):
+    """Return (chest, head, body strip) polygons and the scale, or None if not usable."""
+    center, down, scale = lying_axes(points)
+    h, w = shape[:2]
+    across = points[0] - points[1]
+    if scale < 60 or np.linalg.norm(across) < 0.3 * scale:  # too distant or side-on
+        return None
+    side = np.array([-down[1], down[0]])
+
+    def polygon(half, start, end):
+        a, b = center + start * scale * down, center + end * scale * down
+        return np.array([a - half, a + half, b + half, b - half])
+
+    chest = polygon(0.4 * across, 0.05, 0.7)
+    mask = np.zeros((h, w), np.uint8)
+    cv2.fillConvexPoly(mask, np.int32(np.round(chest)), 1)
+    area = cv2.contourArea(np.float32(chest))
+    if area < 1 or mask.sum() < MIN_IN_FRAME * area:
+        return None
+    reach = 0.4 * abs(float(across @ side)) + 0.6 * scale
+    # Far past both ends, so that the head, legs, and feet are excluded too.
+    strip = polygon(reach * side, -20, 20)
+    return chest, polygon(0.2 * scale * side, -0.75, -0.3), strip, scale
+
+
+def lying_box(points, shape):
+    """Return the chest's bounding box and scale, or None if not usable."""
+    regions = lying_regions(points, shape)
+    if regions is None:
+        return None
+    chest, _, _, scale = regions
+    h, w = shape[:2]
+    x0, y0 = np.maximum(chest.min(0), 0)
+    x1, y1 = np.minimum(chest.max(0), [w, h])
+    return int(x0), int(y0), int(x1), int(y1), scale
+
+
 class ChestTracker:
     """Turn frames into cumulative displacement in shoulder widths."""
 
@@ -67,6 +131,7 @@ class ChestTracker:
     def reset(self):
         self._gray = None
         self._box = None
+        self._points = None
         self.position = 0.0
         self.head = 0.0  # head motion on the same scale, while it can be seen
         self.background = 0.0  # vertical motion subtracted so far
@@ -96,43 +161,57 @@ class ChestTracker:
         prev_box = self._box
         value, reason = np.nan, "chest not visible"
         if box is not None and prev_box is not None:
-            value, reason = self._measure(gray, prev_box)
+            value, reason = self._measure(gray, prev_box, self._points)
         elif box is not None:
             reason = "starting"
         self._gray, self._box, self.box = gray, box, box
+        self._points = points
         return value, reason
 
-    def _measure(self, gray, box):
+    def _masks(self, gray, box, points):
+        """Return masks for the chest, the background, and the head."""
         x0, y0, x1, y1, width = box
-        chest = np.zeros_like(gray)
+        chest, head = np.zeros_like(gray), np.zeros_like(gray)
+        background = np.full_like(gray, 255)
+        if lying_axes(points) is not None:
+            chest_area, head_area, strip, _ = lying_regions(points, gray.shape)
+            cv2.fillConvexPoly(chest, np.int32(np.round(chest_area)), 255)
+            cv2.fillConvexPoly(head, np.int32(np.round(head_area)), 255)
+            cv2.fillConvexPoly(background, np.int32(np.round(strip)), 0)
+            return chest, background, head
+
         chest[y0:y1, x0:x1] = 255
+        # Exclude a generous column around the person from the background.
+        bx0, bx1 = max(0, int(x0 - 0.6 * width)), int(x1 + 0.6 * width)
+        background[:, bx0:bx1] = 0
+        # Just above the shoulders, which is the head when the person is upright.
+        cx, top = (x0 + x1) // 2, int(y0 - 0.05 * width)
+        hy0, hy1 = max(0, int(top - 0.75 * width)), max(0, int(top - 0.3 * width))
+        hx0, hx1 = max(0, int(cx - 0.2 * width)), int(cx + 0.2 * width)
+        head[hy0:hy1, hx0:hx1] = 255
+        return chest, background, head
+
+    def _measure(self, gray, box, points):
+        width = box[4]
+        chest, background, head_mask = self._masks(gray, box, points)
         flow = self._median_flow(gray, chest)
         if flow is None:
             return np.nan, "not enough chest detail"
-
-        # Exclude a generous column around the person from the background.
-        background = np.full_like(gray, 255)
-        bx0, bx1 = max(0, int(x0 - 0.6 * width)), int(x1 + 0.6 * width)
-        background[:, bx0:bx1] = 0
         camera = self._median_flow(gray, background)
         if camera is None:
             return np.nan, "cannot check camera motion"
         if np.linalg.norm(camera) / width > MAX_CAMERA_STEP:
             return np.nan, "camera moving"
 
+        # A chest rises away from the ground, which is image-up for an upright person
+        # and for a lying person seen from the side.
         step = (flow - camera) / width
         if np.linalg.norm(step) > MAX_STEP:
             return np.nan, "too much movement"
         self.position += float(step[1])
         self.background += float(camera[1]) / width
 
-        # Just above the shoulders, which is the head when the person is upright.
-        cx, top = (x0 + x1) // 2, int(y0 - 0.05 * width)
-        hy0, hy1 = max(0, int(top - 0.75 * width)), max(0, int(top - 0.3 * width))
-        hx0, hx1 = max(0, int(cx - 0.2 * width)), int(cx + 0.2 * width)
-        mask = np.zeros_like(gray)
-        mask[hy0:hy1, hx0:hx1] = 255
-        head = self._median_flow(gray, mask)
+        head = self._median_flow(gray, head_mask)
         if head is not None:
             self.head += float(head[1] - camera[1]) / width
         return self.position, "ok"

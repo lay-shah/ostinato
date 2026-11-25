@@ -257,6 +257,77 @@ def test_resolution_change_and_bad_landmarks_do_not_crash():
     tracker = ChestTracker(lambda f: POINTS * [f.shape[1] / 640, f.shape[0] / 480])
     for h, w in sizes:
         tracker.update(np.full((h, w, 3), 90, np.uint8))
-    for value in (np.nan, np.inf, -np.inf):
+    for value in (np.nan, np.inf, -np.inf, 1e12):
         tracker = ChestTracker(lambda f, v=value: POINTS * v)
         assert tracker.update(scene(0))[1] == "chest not visible"
+
+
+def lying(angle, skew=1.0):
+    """Landmarks and body mask for a torso turned in the image. `skew` shortens the
+    shoulder line, as when a lying person is seen from a low camera at the side."""
+    a = np.radians(angle)
+    down = np.array([-np.sin(a), np.cos(a)])  # shoulders to hips; 0 degrees is upright
+    across = np.array([np.cos(a), np.sin(a)])
+    middle = np.array([320, 240]) - 90 * down
+    across = across * skew
+    points = np.array(
+        [
+            middle + 65 * across,
+            middle - 65 * across,
+            middle + 190 * down + 45 * across,
+            middle + 190 * down - 45 * across,
+        ]
+    )
+    outline = [
+        middle - 85 * across,
+        middle + 85 * across,
+        middle + 200 * down + 75 * across,
+        middle + 200 * down - 75 * across,
+    ]
+    body, head = (np.zeros((480, 640), np.uint8) for _ in range(2))
+    cv2.fillPoly(body, [np.int32(outline)], 1)
+    cv2.circle(head, np.int32(middle - 70 * down).tolist(), 42, 1, -1)
+    return points, body, head
+
+
+def run_lying(points, body, head, bpm=15, amp=2.0, head_amp=0.0, sway=0.0, shake=0.0, noise=0.0, fps=10):
+    rng = np.random.default_rng(1000)
+    monitor = Monitor(ChestTracker(lambda f: points))
+    for i in range(28 * fps):
+        wave = np.sin(2 * np.pi * bpm / 60 * i / fps)
+        frame = shift(BACK, 0, sway * wave)
+        # Only the chest rises, not the hips and legs.
+        frame = np.where(body[..., None] == 1, shift(BODY, 0, amp * wave), frame)
+        frame = np.where(head[..., None] == 1, shift(FACE, 0, head_amp * wave), frame)
+        if shake:
+            frame = shift(frame, 0, shake * np.sin(2 * np.pi * 0.4 * i / fps))
+        if noise:
+            frame = np.clip(frame + rng.normal(0, noise, frame.shape), 0, 255).astype(np.uint8)
+        monitor.update(frame, i / fps)
+    return monitor
+
+
+@pytest.mark.parametrize(("angle", "skew"), [(90, 1.0), (90, 0.6), (135, 0.7), (180, 1.0), (-45, 1.0)])
+def test_measures_a_person_lying_at_any_angle(angle, skew):
+    monitor = run_lying(*lying(angle, skew), shake=1.0, noise=3.0)
+    assert monitor.reading.bpm == pytest.approx(15, abs=1), monitor.reading.reason
+
+
+@pytest.mark.parametrize("angle", [90, -60])
+def test_lying_still_rocking_or_moving_background_gives_no_rate(angle):
+    scene_parts = lying(angle)
+    assert run_lying(*scene_parts, amp=0, noise=3.0).reading.bpm is None
+    assert run_lying(*scene_parts, amp=0, shake=1.5).reading.bpm is None
+    assert run_lying(*scene_parts, amp=0, sway=3.0).reading.bpm is None
+    rocking = run_lying(*scene_parts, head_amp=2.2).reading
+    assert rocking.bpm is None and rocking.reason == "whole body moving"
+
+
+def test_chest_region_follows_the_body():
+    from ostinato.chest import chest_box
+
+    points, body, _ = lying(90)
+    x0, y0, x1, y1, _ = chest_box(points, (480, 640))
+    inside = body[y0:y1, x0:x1].mean()
+    assert inside > 0.95
+    assert chest_box(points + [-380, 0], (480, 640)) is None
