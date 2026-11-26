@@ -140,12 +140,13 @@ def check_setup(setup):
 class Robot:
     """One control step at a time: sensors in, one command to the board out."""
 
-    def __init__(self, setup, port, guard=None):
+    def __init__(self, setup, port, guard=None, ask=False):
+        """With `ask`, it asks the person to raise a hand before leaving each view."""
         self.setup = setup
         self.board = Board(port, setup.track)
         self.guard = guard or Guard()
         self.localizer = Localizer(setup.start, setup.markers, setup.track)
-        self.mission = Mission(setup.person, list(setup.views))
+        self.mission = Mission(setup.person, list(setup.views), ask_first=ask)
         self.drive, self.moving = STOP, False
         self._last = None
         self.seen_person = deque(maxlen=LOOKS)
@@ -201,6 +202,12 @@ class Robot:
         self.drive = self.guard.allow(t, want)
         self.board.send(self.drive)
         return self.drive
+
+    @property
+    def wants_ask(self):
+        """Whether to start the spoken request for a raised hand now."""
+        a = self.mission.assessor
+        return a is not None and a.wants_ask and self.mission.state is State.MEASURING
 
     def _check_person(self, chest):
         if chest is None or self.setup.lens_height is None or not self.localizer.good or self.moving:
@@ -321,6 +328,7 @@ def main(argv=None):
     )
     parser.add_argument("--replay", type=Path, metavar="LOG", help="summarize a saved log and stop")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--no-prompt", action="store_true", help="never ask the person to raise a hand")
     parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
     args = parser.parse_args(argv)
     from .remote import Listener, load_key
@@ -371,7 +379,7 @@ def main(argv=None):
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, setup.camera.height)
     finder = PoseFinder()
     monitor, check = Monitor(ChestTracker(finder)), ResponseCheck(Speaker())
-    robot = Robot(setup, port)
+    robot = Robot(setup, port, ask=not args.no_prompt)
     robot.guard.emergency_stop()
     title, start, was, logged = "Ostinato rover", time.monotonic(), None, -1.0
     if listener:
@@ -409,6 +417,8 @@ def main(argv=None):
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next
                 check.cancel()
+            elif robot.wants_ask and not check.active:
+                check.ask(t)
             if log and t - logged >= 0.5:
                 log.write(json.dumps(robot.record(t)) + "\n")
                 logged = t

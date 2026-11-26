@@ -32,6 +32,7 @@ BEARINGS = [0.5, 2.6, -2.7]  # beside the person, not at the head or feet
 MARKERS = {1: (0.0, 2.4), 2: (2.6, 0.0), 3: (0.0, -2.4), 4: (-2.6, 0.0)}
 TRACK = 0.27
 TICKS = 2000  # per meter
+ASK_SECONDS = 10.0
 LABEL = "SIMULATED: drawn person, map, and driving. No robot exists yet."
 
 
@@ -80,7 +81,8 @@ class RoverDemo:
         self.wheels, self.rng = Wheels(self.base, rng), rng
         # Where a person placed it, a few centimeters out.
         setup = Setup(TRACK, TICKS, Pose(2.63, -0.57, 2.45), (0.0, 0.0), list(BEARINGS), dict(MARKERS))
-        self.robot = Robot(setup, self.wheels)
+        self.robot = Robot(setup, self.wheels, ask=True)
+        self.asked_at = None  # the drawn person never raises a hand
         self.mission = self.robot.mission
         self.t, self.drive, self.trail, self.seen = 0.0, STOP, [], []
         self.frame = self.reading = None
@@ -108,27 +110,55 @@ class RoverDemo:
         else:
             self.frame = None
         self.seen = self.sightings() if round(self.t / DT) % 5 == 0 else []
-        self.drive = self.robot.step(self.t, sightings=self.seen, reading=self.reading)
+        self.drive = self.robot.step(self.t, sightings=self.seen, reading=self.reading, asking=self.asking)
         if self.mission.state is not State.MEASURING and measuring:
             self.monitor.reset()  # readings from one view never carry over
+            self.asked_at = None
+        elif self.robot.wants_ask:
+            self.asked_at = self.t
         self.trail.append((self.base.pose.x, self.base.pose.y))
 
     @property
     def done(self):
         return self.mission.state is State.DONE
 
+    @property
+    def asking(self):
+        """Asking lasts 10 s, as in the app. Silent here."""
+        return self.asked_at is not None and self.t - self.asked_at < ASK_SECONDS
+
     def status(self):
         """Return (headline, detail, color)."""
         view = f"View {self.mission.view + 1} of {len(BEARINGS)}"
         if self.done:
-            return f"{self.mission.outcome.capitalize()} (simulated)", "The rover stays where it stopped.", GREEN if self.measured else AMBER
+            return (
+                f"{self.mission.outcome.capitalize()} (simulated)",
+                "The rover stays where it stopped.",
+                GREEN if self.measured else AMBER,
+            )
+        if self.mission.state is State.MEASURING and self.asking:
+            return (
+                f"{view}: asking the person to raise a hand",
+                "Spoken on the rover; silent here. No hand proves nothing.",
+                AMBER,
+            )
         if self.mission.state is State.MEASURING:
             r = self.reading
-            now = f"{r.bpm:.0f} breaths/min" if r and r.bpm is not None else f"unable to assess: {r.reason}" if r else "starting"
+            now = (
+                f"{r.bpm:.0f} breaths/min"
+                if r and r.bpm is not None
+                else f"unable to assess: {r.reason}"
+                if r
+                else "starting"
+            )
             return f"{view}: stopped and measuring", now.capitalize(), BLUE
         if self.mission.state is State.DRIVING:
             why = "Moving to a better view" if self.mission.view else "Driving to the first view"
-            return f"{view}: driving at {abs(self.drive.speed):.1f} m/s", f"{why}. Not measuring while moving.", INK
+            return (
+                f"{view}: driving at {abs(self.drive.speed):.1f} m/s",
+                f"{why}. Not measuring while moving.",
+                INK,
+            )
         return f"{view}: {self.mission.state.value}", "Waiting until it is still before measuring.", INK
 
     def position(self):
