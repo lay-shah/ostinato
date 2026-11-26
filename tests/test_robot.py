@@ -286,11 +286,12 @@ class Port:
     made: ClassVar[list] = []
 
     def __init__(self, name):
-        self.sent, self.ms, self.ticks, self.closed = [], 0, 0, False
+        self.sent, self.times, self.ms, self.ticks, self.closed = [], [], 0, 0, False
         Port.made.append(self)
 
     def write(self, data):
         self.sent.append(data)
+        self.times.append(time.monotonic())
 
     def read(self):
         self.ms += 50
@@ -358,13 +359,14 @@ def test_program_follows_the_remote(program, tmp_path):
 
     key = make_key(tmp_path / "key.txt")
     remote = Remote(load_key(key), "127.0.0.1")
-    sent_at = {}
+    sent_at, last = {}, []
 
     def operator(n):
         # Go from picture 10 to 40, then silence, as if the laptop slept.
         remote.go = 10 <= n
         if n < 40:
             remote.step(time.monotonic())
+            last.append(time.monotonic())
             sent_at[n] = len(Port.made[-1].sent) if Port.made else 0
         time.sleep(0.02)
 
@@ -375,5 +377,6 @@ def test_program_follows_the_remote(program, tmp_path):
     # Its own G is ignored with a remote; nothing moves before the remote says go.
     assert not any(moving(d) for d in port.sent[: sent_at[8]])
     assert any(moving(d) for d in port.sent[sent_at[12] : sent_at[39]])
-    # About 0.3 s of silence later, it stops and stays stopped.
-    assert not any(moving(d) for d in port.sent[sent_at[39] + 25 :])
+    # Within 0.5 s of the last heartbeat, it stops and stays stopped.
+    late = [d for d, at in zip(port.sent, port.times) if at > last[-1] + 0.55]
+    assert late and not any(moving(d) for d in late)
