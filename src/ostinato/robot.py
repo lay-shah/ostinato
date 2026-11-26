@@ -9,7 +9,10 @@ The setup file, in meters and degrees, measured by a person:
     {"track": 0.27, "ticks_per_meter": 2000,
      "start": [2.4, 0.3, 140], "person": [0, 0], "views": [30, 150],
      "markers": {"1": [0, 3], "2": [3, 0]},
-     "camera": {"fov": 70, "pitch": 20}}
+     "camera": {"calibration": "camera.json", "pitch": 20}}
+
+"calibration" is from `python -m ostinato.calibrate`. Without it, give "fov", the
+lens's angle across, and distances to markers are rougher.
 
 "start" is where the rover is placed and which way it faces. "views" are directions
 around the person, from the person, to measure from in order.
@@ -22,6 +25,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .calibrate import Calibration
 from .localize import Camera, Localizer, find_markers
 from .motors import Board
 from .rover import STOP, Drive, Guard, Mission, Pose, State
@@ -44,9 +48,17 @@ class Setup:
         try:
             raw = json.loads(Path(path).read_text())
             x, y, heading = (float(v) for v in raw["start"])
-            camera = {k: float(v) for k, v in raw.get("camera", {}).items()}
-            if not camera.keys() <= {"fov", "pitch", "pan"}:
-                raise ValueError("camera takes fov, pitch, and pan")
+            camera = dict(raw.get("camera", {}))
+            if not camera.keys() <= {"fov", "pitch", "pan", "calibration"}:
+                raise ValueError("camera takes calibration, fov, pitch, and pan")
+            lens = camera.pop("calibration", None)
+            camera = {k: float(v) for k, v in camera.items()}
+            if lens is not None:
+                if "fov" in camera:
+                    raise ValueError("give calibration or fov, not both")
+                camera = Calibration.load(Path(path).parent / lens).camera(**camera)
+            else:
+                camera = Camera(**camera)
             setup = cls(
                 float(raw["track"]),
                 float(raw["ticks_per_meter"]),
@@ -54,7 +66,7 @@ class Setup:
                 tuple(float(v) for v in raw["person"]),
                 [math.radians(float(v)) for v in raw["views"]],
                 {int(k): tuple(float(v) for v in p) for k, p in raw["markers"].items()},
-                Camera(**camera),
+                camera,
             )
         except (OSError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
             raise ValueError(f"setup file: {error}") from None

@@ -66,7 +66,7 @@ It has never run on a robot, and it does not replace a switch that cuts motor po
 
 ## Knowing where it is
 
-`ostinato.localize` combines the wheel encoders with printed markers that the same camera sees. Print them with `python -m ostinato.localize --print 1 2 3 4`, tape them upright, and measure where each one and the person are. It tracks its own uncertainty. When that passes 0.15 m, or the markers contradict it, the guard hears nothing more and the rover stops.
+`ostinato.localize` combines the wheel encoders with printed markers that the same camera sees. Print them with `python -m ostinato.localize --print 1 2 3 4`, tape them upright, and measure where each one and the person are. Measure the camera's lens once with `python -m ostinato.calibrate`, which uses a printed board; without that, distances to markers rely on the lens angle on the box. It tracks its own uncertainty. When that passes 0.15 m, or the markers contradict it, the guard hears nothing more and the rover stops.
 
 In simulation it reached its viewpoint in 99 of 100 drives and never came within 1.1 m of the person. With every marker hidden it stopped in 100 of 100. Simulated wheels and sightings are kinder than real ones. A person still has to place it at the start and measure where the casualty is: it does not find people by itself.
 
