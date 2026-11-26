@@ -72,7 +72,7 @@ In simulation it reached its viewpoint in 99 of 100 drives and never came within
 
 ## Running it
 
-`python -m ostinato.robot --setup room.json --port /dev/ttyACM0` runs the whole thing: camera, markers, wheels, guard, and the breathing check at each viewpoint. It needs `pip install -e ".[robot]"`. The setup file holds measurements a person takes; its format is at the top of `src/ostinato/robot.py`. It starts stopped. G starts it, Space stops it, Q quits.
+`python -m ostinato.robot --setup room.json --port /dev/ttyACM0` runs the whole thing: camera, markers, wheels, guard, and the breathing check at each viewpoint. It needs `pip install -e ".[robot]"`. The setup file holds measurements a person takes; its format is at the top of `src/ostinato/robot.py`. It starts stopped. Drive it from a laptop with `python -m ostinato.remote --robot <address> --key key.txt` and `--key key.txt` on the rover; make the key once with `python -m ostinato.remote --make-key key.txt`. G on the remote lets it move, and Space stops it. If the remote's heartbeats stop for 0.5 s, because the window closed, the laptop slept, or Wi-Fi dropped, the rover stops. Messages are signed, and old ones played back are ignored. Without `--key` it takes G and Space from its own window, which is only for testing on a stand.
 
 With the camera's height in the setup file, the camera checks at each viewpoint that the person is where the file says, within 0.25 m. If not, or if it never saw them there, the rover stops for a person to check: someone who moved may be beside it, out of the picture. In simulation it caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
 

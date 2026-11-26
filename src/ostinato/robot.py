@@ -220,11 +220,19 @@ def main(argv=None):
     parser.add_argument("--setup", type=Path, required=True)
     parser.add_argument("--port", required=True, help="the motor board's serial port")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
     args = parser.parse_args(argv)
+    from .remote import Listener, load_key
+
+    listener = None
     try:
         setup = Setup.load(args.setup)
+        if args.key:
+            listener = Listener(load_key(args.key))
         port = SerialPort(args.port)
-    except ValueError as error:
+    except (OSError, ValueError) as error:
+        if listener:
+            listener.close()
         parser.exit(1, f"{error}\n")
     camera = open_camera(args.camera)
     if camera is None:
@@ -237,7 +245,10 @@ def main(argv=None):
     robot = Robot(setup, port)
     robot.guard.emergency_stop()
     title, start, was = "Ostinato rover", time.monotonic(), None
-    print("Stopped. G to go, Space to stop, Q to quit. Keep the hardware emergency stop in hand.")
+    if listener:
+        print(f"Stopped. Waiting for the remote on port {listener.port}. Keep the hardware emergency stop in hand.")
+    else:
+        print("No --key: only for testing on a stand or tethered. G go, Space stop, Q quit.")
     try:
         while True:
             ok, frame = camera.read()
@@ -257,8 +268,12 @@ def main(argv=None):
             chest = None
             if measuring and finder.points is not None:
                 chest = tuple(finder.points.mean(axis=0) * (frame.shape[1] / 640))
+            link = True
+            if listener:
+                listener.poll(t, robot.guard, robot.status())  # tells the guard itself
+                link = False
             robot.step(
-                t, True, find_markers(gray, setup.camera), reading, bool(responded), check.active, chest
+                t, link, find_markers(gray, setup.camera), reading, bool(responded), check.active, chest
             )
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next
@@ -271,7 +286,7 @@ def main(argv=None):
             key = cv2.waitKey(1) & 0xFF
             if key == ord(" "):
                 robot.guard.emergency_stop()
-            elif key == ord("g"):
+            elif key == ord("g") and not listener:
                 robot.guard.clear()
             elif key == ord("q") or robot.mission.state is State.DONE:
                 break
@@ -285,6 +300,8 @@ def main(argv=None):
         camera.release()
         finder.close()
         port.close()
+        if listener:
+            listener.close()
         cv2.destroyAllWindows()
     print(f"Outcome: {robot.mission.outcome}")
 
