@@ -13,6 +13,7 @@ int main() {
     } else {
       guard.tick((uint32_t)ms, value != 0);
       std::printf("%ld %ld %d\n", guard.left(), guard.right(), guard.armed());
+      std::fflush(stdout);
     }
   }
 }

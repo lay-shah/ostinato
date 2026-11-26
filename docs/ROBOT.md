@@ -70,6 +70,14 @@ It has never run on a robot, and it does not replace a switch that cuts motor po
 
 In simulation it reached its viewpoint in 99 of 100 drives and never came within 1.1 m of the person. With every marker hidden it stopped in 100 of 100. Simulated wheels and sightings are kinder than real ones. A person still has to place it at the start and measure where the casualty is: it does not find people by itself.
 
+## Running it
+
+`python -m ostinato.robot --setup room.json --port /dev/ttyACM0` runs the whole thing: camera, markers, wheels, guard, and the breathing check at each viewpoint. It needs `pip install -e ".[robot]"`. The setup file holds measurements a person takes; its format is at the top of `src/ostinato/robot.py`. It starts stopped. G starts it, Space stops it, Q quits.
+
+When it is unsure where it is, it turns on the spot, at most once around, to find a marker. Turning in place is the only movement allowed without knowing how far away the person is.
+
+Against the compiled board code with simulated wheels and markers, it reached its first viewpoint in 300 of 300 drives, including with 30% of messages lost or damaged, and was never nearer than 1.2 m. With no marker in sight it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again. It has not run on hardware.
+
 ## Still unknown
 
 - Breathing accuracy on people, seated or lying down

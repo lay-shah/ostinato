@@ -180,3 +180,14 @@ def test_waits_still_before_measuring():
     mission, _, _ = simulate(2060)
     times = {state: t for t, state, _ in mission.log}
     assert times["measuring"] - times["settling"] >= 2.0
+
+
+def test_turning_in_place_needs_no_news_of_the_person():
+    guard = Guard()
+    for t in (0.0, 0.1, 0.2):
+        guard.link(t), guard.sensors(t, 5, 5)
+        turned = guard.allow(t, Drive(0.0, 0.5))
+    assert turned.turn > 0 and guard.reason == "ok"
+    assert guard.allow(0.3, Drive(0.1, 0.5)) == STOP and guard.reason == "no news from person"
+    guard.link(0.4), guard.sensors(0.4, 5, 5), guard.person(0.4, math.nan, True)
+    assert guard.allow(0.4, Drive(0.1, 0.0)) == STOP and guard.reason == "invalid sensor"
