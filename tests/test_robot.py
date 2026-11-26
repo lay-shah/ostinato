@@ -409,7 +409,8 @@ def test_setup_check(tmp_path):
     from ostinato.robot import check_setup
 
     errors, warnings = check_setup(setup_with(tmp_path))
-    assert errors == [] and all("only marker" in w for w in warnings)
+    assert errors == [] and all("only marker" in w or "without a facing" in w for w in warnings)
+    assert any("markers 1, 2, 3, 4 without a facing" in w for w in warnings)
     errors, _ = check_setup(setup_with(tmp_path, start=[0.8, 0, 0]))
     assert any("start is 0.80 m" in e for e in errors)
     errors, _ = check_setup(setup_with(tmp_path, markers={"1": [5, 0]}))
@@ -421,6 +422,27 @@ def test_setup_check(tmp_path):
     # A marker too small in the picture does not count.
     errors, _ = check_setup(setup_with(tmp_path, markers={"4": [-9, 0], "2": [9, 0]}))
     assert sum("sees no marker" in e for e in errors) == 2
+
+
+def test_setup_check_knows_which_way_markers_face(tmp_path):
+    from ostinato.robot import check_setup
+
+    # View 1 sees only marker 4, 4.1 m away, nearly straight on when it faces +x.
+    def marker_4(facing):
+        markers = {**ROOM["markers"], "4": [-3, 0, facing]}
+        return check_setup(setup_with(tmp_path, markers=markers))
+
+    errors, warnings = marker_4(0)
+    assert errors == [] and any("markers 1, 2, 3 without" in w for w in warnings)
+    assert marker_4(50)[0] == []  # turned 41 degrees from view 1: still read
+    for facing in (60, 180):  # turned 51 degrees, too far at 4.1 m; or backwards
+        errors, _ = marker_4(facing)
+        assert [e for e in errors if "view 1 sees no marker" in e]
+    setup = setup_with(tmp_path, markers={"4": [-3, 0, 90], "2": [3, 0]})
+    assert setup.markers == {4: (-3.0, 0.0), 2: (3.0, 0.0)} and setup.facings == {4: math.pi / 2}
+    for bad in ([-3, 0, 90, 1], [-3, 0, 1e400]):
+        with pytest.raises(ValueError, match="setup file"):
+            setup_with(tmp_path, markers={"4": bad})
 
 
 def test_check_command(tmp_path, capsys):

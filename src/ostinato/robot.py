@@ -8,11 +8,15 @@ The setup file, in meters and degrees, measured by a person:
 
     {"track": 0.27, "ticks_per_meter": 2000,
      "start": [2.4, 0.3, 140], "person": [0, 0], "views": [30, 150],
-     "markers": {"1": [0, 3], "2": [3, 0]},
+     "markers": {"1": [0, 3, 270], "2": [3, 0, 180]},
      "camera": {"calibration": "camera.json", "pitch": 20, "height": 0.8}}
 
 "calibration" is from `python -m ostinato.calibrate`. Without it, give "fov", the
 lens's angle across, and distances to markers are rougher.
+
+Each marker is [x, y, facing]: where it is, and the direction its printed side faces.
+The facing may be left out, as [x, y], but then the check cannot tell whether a marker is
+turned too far from a view to be read.
 
 "start" is where the rover is placed and which way it faces. "views" are directions
 around the person, from the person, to measure from in order. Check a file with
@@ -53,6 +57,7 @@ class Setup:
     markers: dict[int, tuple[float, float]]
     camera: Camera = field(default_factory=Camera)
     lens_height: float | None = None  # m above the floor
+    facings: dict[int, float] = field(default_factory=dict)  # radians, where given
 
     @classmethod
     def load(cls, path):
@@ -77,20 +82,22 @@ class Setup:
                 Pose(x, y, math.radians(heading)),
                 tuple(float(v) for v in raw["person"]),
                 [math.radians(float(v)) for v in raw["views"]],
-                {int(k): tuple(float(v) for v in p) for k, p in raw["markers"].items()},
+                {int(k): tuple(float(v) for v in p[:2]) for k, p in raw["markers"].items()},
                 camera,
                 lens_height,
+                {int(k): math.radians(float(p[2])) for k, p in raw["markers"].items() if len(p) == 3},
             )
+            sizes = [len(p) for p in raw["markers"].values()]
         except (OSError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
             raise ValueError(f"setup file: {error}") from None
         numbers = [setup.track, setup.ticks_per_meter, *setup.person, *setup.views]
-        numbers += [v for p in setup.markers.values() for v in p]
+        numbers += [v for p in setup.markers.values() for v in p] + list(setup.facings.values())
         if not all(math.isfinite(v) for v in numbers):
             raise ValueError("setup file: every number must be finite")
         if not (0.1 <= setup.track <= 1 and setup.ticks_per_meter > 0 and len(setup.person) == 2):
             raise ValueError("setup file: check track, ticks_per_meter, and person")
-        if not setup.views or not setup.markers or any(len(p) != 2 for p in setup.markers.values()):
-            raise ValueError("setup file: needs views and at least one marker at [x, y]")
+        if not setup.views or not setup.markers or any(n not in (2, 3) for n in sizes):
+            raise ValueError("setup file: needs views and at least one marker at [x, y, facing]")
         if setup.lens_height is not None and not 0.2 <= setup.lens_height <= 2:
             raise ValueError("setup file: camera height must be 0.2 to 2 m")
         if not 0 < setup.camera.fov < 170 or abs(setup.camera.pitch) > 60:
@@ -99,6 +106,11 @@ class Setup:
 
 
 MIN_PIXELS = 30  # a marker smaller than this in the picture is often missed
+# A marker turned away from the camera is read less far. From `python -m ostinato.marker_range`
+# with a 2 px blur: past TURNED, reliably only to TURNED_RANGE; past TURNED_AWAY, barely.
+TURNED = math.radians(45)
+TURNED_RANGE = 3.0  # m
+TURNED_AWAY = math.radians(65)
 
 
 def check_setup(setup):
@@ -110,13 +122,24 @@ def check_setup(setup):
         errors.append(f"the start is {gap:.2f} m from the person; it must be at least {RING} m away")
     half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
     sees = setup.camera.matrix[0, 0] * MARKER / MIN_PIXELS
+
+    def reach(n, x, y):
+        """How far marker n can be from (x, y) and still be read."""
+        if n not in setup.facings:
+            return sees
+        mx, my = setup.markers[n]
+        turn = abs(wrap(math.atan2(y - my, x - mx) - setup.facings[n]))
+        if turn > TURNED_AWAY:
+            return 0.0
+        return min(sees, TURNED_RANGE) if turn > TURNED else sees
+
     for i, bearing in enumerate(setup.views, 1):
         x, y = px + RING * math.cos(bearing), py + RING * math.sin(bearing)
         facing = math.atan2(py - y, px - x)  # the camera's direction there
         seen = [
             n
             for n, (mx, my) in setup.markers.items()
-            if 0.5 < math.dist((x, y), (mx, my)) < sees
+            if 0.5 < math.dist((x, y), (mx, my)) < reach(n, x, y)
             and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
         ]
         if seen:
@@ -125,6 +148,12 @@ def check_setup(setup):
             )
         else:
             errors.append(f"view {i} sees no marker: put one beyond the person, as seen from there")
+    unknown = sorted(set(setup.markers) - set(setup.facings))
+    if unknown:
+        warnings.append(
+            f"marker{'s' if len(unknown) > 1 else ''} {', '.join(map(str, unknown))} "
+            "without a facing; one turned more than 45 degrees from a view may be missed"
+        )
     for a, b in zip(setup.views, setup.views[1:]):
         if abs(wrap(a - b)) < math.radians(20):
             warnings.append("two views are within 20 degrees of each other and see much the same")
