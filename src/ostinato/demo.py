@@ -96,9 +96,7 @@ class Demo:
         cv2.line(frame, (0, 250), (SIZE[0], 250), (44, 48, 52), 3)
         legs = np.array([[400, 262], [420, 350], [640, 372], [640, 300]])
         cv2.fillPoly(frame, [legs], (62, 54, 48), cv2.LINE_AA)
-        shirt = cv2.warpAffine(
-            self._shirt, np.float32([[1, 0, 0], [0, 1, dy]]), SIZE, borderMode=cv2.BORDER_REFLECT
-        )
+        shirt = cv2.warpAffine(self._shirt, np.float32([[1, 0, 0], [0, 1, dy]]), SIZE, borderMode=cv2.BORDER_REFLECT)
         torso = np.zeros(self._torso.shape, np.uint8)
         outline = np.array([[180, 222], [200, 345], [330, 365], [425, 352], [410, 258], [300, 205]])
         cv2.fillPoly(torso, [outline], 1, cv2.LINE_AA)
