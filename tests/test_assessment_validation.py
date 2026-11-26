@@ -1,5 +1,4 @@
 """Integrated checks for completed assessments, paired replay, and search metrics."""
-
 import json
 
 import pytest
@@ -19,16 +18,9 @@ def test_completed_time_stays_fixed_when_live_evidence_changes():
 
 
 def test_paired_orders_use_the_same_recorded_samples():
-    hidden = Observation(
-        "A",
-        30,
-        None,
-        0,
-        "chest not visible",
-        8,
-        ((0, None, 0, "chest not visible"), (5, None, 0, "chest not visible")),
-    )
-    clear = Observation("B", 30, 19, 0.9, "ok", 8, ((25, 19, 0.9, "ok"), (28, 19, 0.9, "ok")))
+    hidden = Observation("A", 30, None, 0, "chest not visible", 8,
+                         ((0, None, 0, "chest not visible"), (5, None, 0, "chest not visible")))
+    clear = Observation("B", 30, 19, .9, "ok", 8, ((25, 19, .9, "ok"), (28, 19, .9, "ok")))
     report = summarize([(hidden, clear)])
     assert report["second_view_reports_after_first_decline"] == 1
     assert report["accurate_second_view_recoveries"] == 0
@@ -38,7 +30,7 @@ def test_paired_orders_use_the_same_recorded_samples():
 
 
 def test_summary_only_trial_does_not_invent_confirmation():
-    row = Observation("A", 30, 16, 0.9, "ok", 8)
+    row = Observation("A", 30, 16, .9, "ok", 8)
     with pytest.raises(ValueError, match="timed readings"):
         replay([row, row])
 
@@ -46,7 +38,7 @@ def test_summary_only_trial_does_not_invent_confirmation():
 def test_benchmark_accounts_for_failures():
     result = compare(range(1000, 1002))
     for policy in result["policies"]:
-        assert policy["unassessed_fraction"] + policy["measured_fraction"] == pytest.approx(1, abs=0.0011)
+        assert policy["unassessed_fraction"] + policy["measured_fraction"] == pytest.approx(1, abs=.0011)
         assert policy["mean_failed_observation_s_per_scene"] >= 0
         if policy["measured_fraction"]:
             assert policy["mean_time_to_usable_measured_only_s"] > 0
