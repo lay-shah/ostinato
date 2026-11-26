@@ -47,3 +47,17 @@ def test_window_runs_and_quits(monkeypatch):
     monkeypatch.setattr(cv2, "waitKey", lambda ms: next(keys))
     rover_demo.main([])
     assert len(shown) == 4
+
+
+def test_drives_on_its_own_estimate_and_corrects_it_with_markers():
+    demo, gaps, used = RoverDemo(seed=3), [], 0
+    while not demo.done and demo.t < 120:
+        demo.step()
+        used += len(demo.seen)
+        e, p = demo.robot.localizer.pose, demo.base.pose
+        gaps.append(math.dist((e.x, e.y), (p.x, p.y)))
+    assert used > 20 and max(gaps) < 0.2 and demo.measured
+    assert "Position known" in demo.position()
+    # The wheels stop when the robot program goes quiet.
+    demo.wheels.run(demo.t + 1.0, 0.05)
+    assert demo.wheels.speeds == (0, 0)

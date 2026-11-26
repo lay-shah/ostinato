@@ -1,7 +1,8 @@
 """Watch the simulated rover find a view and measure: `python -m ostinato.rover_demo`.
 
-The map, the driving, and the person are drawn. The drive limits, chest tracking,
-breathing estimate, and decisions are the real code. Nothing here is a robot.
+The map, the wheels, the motor board, the markers' sightings, and the person are
+drawn. The robot program, position tracking, drive limits, chest tracking, breathing
+estimate, and decisions are the real code. Nothing here is a robot.
 """
 
 import argparse
@@ -16,7 +17,10 @@ from .app import Monitor
 from .chest import ChestTracker
 from .decision import Action
 from .demo import Demo
-from .rover import KEEP_OUT, RING, STOP, Guard, Mission, Pose, SimulatedBase, State
+from .localize import Sighting
+from .motors import seal
+from .robot import Robot, Setup
+from .rover import KEEP_OUT, RING, STOP, Drive, Pose, SimulatedBase, State, wrap
 from .ui import AMBER, BG, BLUE, CARD, DIM, GREEN, INK, LINE, font
 
 W, H = 1080, 600
@@ -25,23 +29,75 @@ MAP = (564, 100, 1056, 592)
 SCALE = 82.0  # map pixels per meter
 DT = 1 / 15
 BEARINGS = [0.5, 2.6, -2.7]  # beside the person, not at the head or feet
+MARKERS = {1: (0.0, 2.4), 2: (2.6, 0.0), 3: (0.0, -2.4), 4: (-2.6, 0.0)}
+TRACK = 0.27
+TICKS = 2000  # per meter
 LABEL = "SIMULATED: drawn person, map, and driving. No robot exists yet."
+
+
+class Wheels:
+    """A drawn motor board and wheels, on the port the robot program talks to.
+    It obeys only checked commands, and stops when they stop coming."""
+
+    def __init__(self, base, rng):
+        self.base, self.rng = base, rng
+        self.speeds, self.ticks, self.armed, self.heard = (0, 0), [0.0, 0.0], False, -1.0
+        self.t, self._out = 0.0, b""
+
+    def write(self, data):
+        body = data.rstrip(b"\n")
+        if seal(body[:-5].decode())[:-1] != body:
+            return
+        _, _, left, right = body[:-5].decode().split(",")
+        left, right = int(left), int(right)
+        if self.armed or (left == right == 0):
+            self.armed, self.speeds, self.heard = True, (left, right), self.t
+
+    def read(self):
+        data, self._out = self._out, b""
+        return data
+
+    def run(self, t, dt):
+        self.t = t
+        if t - self.heard > 0.5:
+            self.armed, self.speeds = False, (0, 0)
+        left, right = (v / 1000 * (1 + self.rng.normal(0, 0.03)) for v in self.speeds)
+        self.ticks = [a + b * dt * TICKS for a, b in zip(self.ticks, (left, right))]
+        self.base.step(Drive((left + right) / 2, (right - left) / TRACK), dt)
+        ms = round(t * 1000)
+        self._out += seal(f"T,{ms},{int(self.ticks[0])},{int(self.ticks[1])},3000,3000,{int(self.armed)}")
+        return self.speeds != (0, 0)
 
 
 class RoverDemo:
     """One run. Call `step` once per frame."""
 
     def __init__(self, seed=1):
+        rng = np.random.default_rng(seed)
         self.scene = Demo(lying=True)
         self.monitor = Monitor(ChestTracker(self.scene))
-        self.base = SimulatedBase(Pose(2.6, -0.6, 2.4), (0.0, 0.0), np.random.default_rng(seed))
-        self.guard, self.mission = Guard(), Mission((0.0, 0.0), list(BEARINGS))
-        self.t, self.drive, self.trail = 0.0, STOP, []
+        self.base = SimulatedBase(Pose(2.6, -0.6, 2.4), (0.0, 0.0), rng, slip=0.0)
+        self.wheels, self.rng = Wheels(self.base, rng), rng
+        # Where a person placed it, a few centimeters out.
+        setup = Setup(TRACK, TICKS, Pose(2.63, -0.57, 2.45), (0.0, 0.0), list(BEARINGS), dict(MARKERS))
+        self.robot = Robot(setup, self.wheels)
+        self.mission = self.robot.mission
+        self.t, self.drive, self.trail, self.seen = 0.0, STOP, [], []
         self.frame = self.reading = None
+
+    def sightings(self):
+        """Markers in front of the camera, measured a little wrongly."""
+        p, found = self.base.pose, []
+        for number, (x, y) in MARKERS.items():
+            bearing = wrap(math.atan2(y - p.y, x - p.x) - p.heading)
+            if abs(wrap(bearing - math.pi / 2)) < 0.6:
+                distance = math.dist((x, y), (p.x, p.y)) * (1 + self.rng.normal(0, 0.02))
+                found.append(Sighting(number, distance, bearing + self.rng.normal(0, 0.01)))
+        return found
 
     def step(self):
         self.t += DT
-        self.base.tell(self.guard, self.t)
+        self.wheels.run(self.t, DT)
         measuring = self.mission.state is State.MEASURING
         self.reading = None
         if measuring:
@@ -51,11 +107,10 @@ class RoverDemo:
             self.reading = self.monitor.update(self.frame, self.t)
         else:
             self.frame = None
-        want = self.mission.update(self.t, self.base.pose, self.drive != STOP, self.reading)
+        self.seen = self.sightings() if round(self.t / DT) % 5 == 0 else []
+        self.drive = self.robot.step(self.t, sightings=self.seen, reading=self.reading)
         if self.mission.state is not State.MEASURING and measuring:
             self.monitor.reset()  # readings from one view never carry over
-        self.drive = self.guard.allow(self.t, want)
-        self.base.step(self.drive, DT)
         self.trail.append((self.base.pose.x, self.base.pose.y))
 
     @property
@@ -76,6 +131,15 @@ class RoverDemo:
             return f"{view}: driving at {abs(self.drive.speed):.1f} m/s", f"{why}. Not measuring while moving.", INK
         return f"{view}: {self.mission.state.value}", "Waiting until it is still before measuring.", INK
 
+    def position(self):
+        place = self.robot.localizer.uncertainty[0]
+        if self.robot.localizer.lost:
+            return "Position lost: a person must place it again"
+        text = f"Position known within about {200 * place:.0f} cm"
+        if not self.robot.localizer.good:
+            text += ": turning to find a marker"
+        return text
+
     @property
     def measured(self):
         a = self.mission.assessor
@@ -95,7 +159,7 @@ class RoverDemo:
         if self.frame is None:
             text = "Camera off while driving" if not self.done else "Finished. Press R to run again."
             d.text(((x0 + x1) / 2, (y0 + y1) / 2), text, font=font(20), fill=DIM, anchor="mm")
-        d.text((24, 506), f"{self.t:.0f} s", font=font(20), fill=INK)
+        d.text((24, 506), f"{self.t:.0f} s     {self.position()}", font=font(18), fill=INK)
         d.text((24, 536), LABEL, font=font(15), fill=AMBER)
         d.text((24, 562), "R  Run again     Q  Quit", font=font(15), fill=DIM)
         screen = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -121,14 +185,29 @@ class RoverDemo:
         x, y = self._at(0, 0)
         d.ellipse((x - 14, y - 44, x + 14, y - 18), fill=(186, 140, 104))
         d.rounded_rectangle((x - 18, y - 20, x + 18, y + 48), 8, fill=(84, 138, 190))
-        d.text((x, MAP[1] + 14), "Map from above. Orange: 1 m keep-out", font=font(14), fill=DIM, anchor="ma")
+        d.text(
+            ((MAP[0] + MAP[2]) / 2, MAP[3] - 10),
+            "From above. Orange: 1 m keep-out, and where it thinks it is",
+            font=font(14),
+            fill=DIM,
+            anchor="md",
+        )
         for i, bearing in enumerate(BEARINGS):
             vx, vy = self._at(RING * math.cos(bearing), RING * math.sin(bearing))
             fill = BLUE if i == self.mission.view else DIM
             d.ellipse((vx - 11, vy - 11, vx + 11, vy + 11), outline=fill, width=2)
             d.text((vx, vy), str(i + 1), font=font(13), fill=fill, anchor="mm")
+        seen = {s.marker for s in self.seen}
+        for number, (mx, my) in MARKERS.items():
+            x, y = self._at(mx, my)
+            d.rectangle((x - 9, y - 9, x + 9, y + 9), fill=BLUE if number in seen else INK)
+            d.text((x, y), str(number), font=font(12), fill=CARD, anchor="mm")
         if len(self.trail) > 1:
             d.line([self._at(*p) for p in self.trail], fill=DIM, width=2)
+        e, spread = self.robot.localizer.pose, 2 * self.robot.localizer.uncertainty[0]
+        ex, ey = self._at(e.x, e.y)
+        r = max(4.0, spread * SCALE)
+        d.ellipse((ex - r, ey - r, ex + r, ey + r), outline=AMBER, width=2)
         p = self.base.pose
         c, s = math.cos(p.heading), math.sin(p.heading)
         corners = [(0.18, 0.0), (-0.14, 0.12), (-0.14, -0.12)]
