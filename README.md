@@ -2,33 +2,34 @@
 
 Ostinato is a planned autonomous robot that helps responders find and assess casualties in disaster areas where communication networks are down. It is designed to detect people, measure breathing from chest movement, check for a response to a spoken prompt, and report "unable to assess" when its data is not trustworthy. All processing is intended to run on the device.
 
-**Status:** a desktop app measures one person's breathing from a webcam, asks for a hand raise, and decides whether to report, wait, move, or get help. Navigation exists only in [simulation](docs/SIMULATION.md). Tested mostly on synthetic signals and video; **accuracy on people has not been measured**.
+**Status:** the browser and desktop prototypes estimate one person’s breathing rate from webcam video, check for a hand raise, and indicate whether to collect more video, change views, or ask for help. Navigation exists in [simulation](docs/SIMULATION.md). Testing has focused on synthetic signals and video. **No accuracy results from trials on people have been published.**
 
 > Research prototype. Not a medical device, and not for use in real emergencies. No detected motion must never be reported as "not breathing" or "dead".
 
-## Explore Ostinato
+## Try it in the browser
 
-[Run the live camera assessment](https://sahilnpatel.github.io/ostinato/live.html), [try the synthetic signal demo](https://sahilnpatel.github.io/ostinato/), or [read the project report](https://sahilnpatel.github.io/ostinato/PROJECT_REPORT.html). The live browser page downloads its runtime and pose model on first use. It processes frames on your device using the Python chest tracker, breathing estimator, assessment and hand-response logic. The desktop app below can also run offline after installation.
+Open the [live camera assessment](https://sahilnpatel.github.io/ostinato/live.html), [synthetic signal demo](https://sahilnpatel.github.io/ostinato/), or [project report](https://sahilnpatel.github.io/ostinato/PROJECT_REPORT.html). The site is public and asks for no account or sign-in.
 
-To serve the browser version locally, run `python -m http.server --bind 127.0.0.1 --directory docs 8000` and open `http://localhost:8000/live.html`. After changing the Python core, refresh the browser bundle with `python docs/build_web_core.py`.
+- **Try sample** runs the assessment on generated motion without requesting your camera.
+- **Start camera** requests camera access in your browser. Frame one person’s head, both shoulders, and chest with some stationary background visible. Hold the camera steady and allow at least 25 seconds of usable video. Use **Ask for response** to check for a hand raise, **Confirm new view** after moving the camera when asked, and **Stop** when done. Before leaving a view with persistently weak evidence, the camera session checks for a hand raise. If a local voice is unavailable, read the displayed prompt aloud. See the [demo guide](docs/DEMO.md) for details.
 
-## First prototype
+The browser downloads the runtime and, in camera mode, the pose model. Video processing runs in the browser. Ostinato does not upload or save camera frames. **Download assessment summary** saves a local text file with results and decisions after the assessment finishes. Treat reports from real sessions as private.
 
-- Live breathing-rate measurement from a laptop camera, with a heuristic signal-quality score
-- A simulated robot that chooses where to look next
-- A ranked map explaining why each person was prioritized
+To preview from a checkout, serve the files on localhost. Open `http://localhost:8000/live.html` in your browser.
 
-Navigation is simulated in the first prototype. See [the plan](docs/PLAN.md) and the [demo guide](docs/DEMO.md).
+```bash
+python3 -m http.server --bind 127.0.0.1 --directory docs 8000
+```
 
 ## Setup
 
-Requires Python 3.10, 3.11, or 3.12.
+The desktop app requires Python 3.10, 3.11, or 3.12 and can run offline after installation. These setup commands use a POSIX shell.
 
 ```bash
-python3.10 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
+python -m pip install -e ".[dev]"
+python -m pytest
 ```
 
 ## Run the breathing detector
@@ -57,7 +58,7 @@ This runs the real tracker, estimator, decisions, and voice prompt on a drawn pe
 
 ### Save a report
 
-Press S to save the current assessment as an HTML page in `data/`, which git ignores. It holds times, rates, and decisions, never video, and only you can read the file. Use `--reports FOLDER` to save elsewhere.
+Press S to save the current assessment as an HTML page in `data/`, which git ignores. It contains times, rates, and decisions and does not contain video. Keep it local unless participants agreed to sharing. Use `--reports FOLDER` to save elsewhere.
 
 ## Run the validation workflow
 
@@ -67,7 +68,7 @@ Run the reproducible blocked-view demo with synthetic frames:
 pytest -q tests/test_chest.py::test_paired_trial_from_synthetic_frames_to_decision
 ```
 
-For a physical trial, an observer counts breaths during two 30-second windows. Keep individual trial files local. See the [paired trial guide](docs/VIEWPOINT_TRIALS.md) for setup, accuracy scoring and replay assumptions.
+For a physical trial, use a consenting healthy volunteer and a separate observer. The observer counts breaths during two timed 30-second windows and enters each count before seeing the estimate. Use anonymous view labels and keep individual trial files local. The [paired trial guide](docs/VIEWPOINT_TRIALS.md) covers setup, scoring, and replay assumptions.
 
 ```bash
 mkdir -p data  # ignored by git
@@ -92,4 +93,4 @@ Open `data/medic.html` in any browser. It works offline and shows only what the 
 
 How the estimator decides, its benchmark, and its known weaknesses are in [ESTIMATOR.md](docs/ESTIMATOR.md).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source changes and Pages deployment.

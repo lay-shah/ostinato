@@ -1,6 +1,14 @@
 # Demo guide
 
-## One-minute version, no camera
+## Browser walkthrough
+
+Open the [live camera page](https://sahilnpatel.github.io/ostinato/live.html), then choose **Try sample**. Let the sample finish and select **Download assessment summary**. Select **Restart assessment**, then choose **Ask for response** as soon as it is available to see the scripted hand raise while the new assessment is still gathering evidence. **Stop** ends the session.
+
+For a camera walkthrough, select **Start camera** and allow camera access. Place the camera on a stable surface, 1 to 2 m away from a consenting healthy volunteer. Include their head, both shoulders, chest, and some stationary background. Allow at least 25 seconds of usable video. If the view stays weak, the browser asks the person to raise a hand before requesting a new view or in-person help. The browser can speak using a local English voice if one is available. If the text prompt appears without sound, read it aloud as soon as it appears. The browser then starts watching for a raised hand automatically. Keep the head and shoulders in frame so the camera can see the raised wrist. If the assessment requests a new view, reposition the camera, wait for it to settle, then select **Confirm new view**. Use **Can’t move** when a second view is unavailable. When the assessment finishes, you can download a report with assessment results and decisions. **Stop** releases the camera.
+
+A webcam walkthrough shows whether the interface and camera work under those conditions. Use the [paired webcam trial](VIEWPOINT_TRIALS.md#run-a-paired-webcam-trial) to compare estimates with independently counted breaths.
+
+## Desktop demo, no camera
 
 Run `ostinato --demo`, or double-click `launch/Ostinato Demo.command` on a Mac. Turn the volume up. `ostinato --demo-lying` shows the same story with the person lying down.
 
@@ -15,11 +23,11 @@ Run `ostinato --demo`, or double-click `launch/Ostinato Demo.command` on a Mac. 
 
 Press S to save the report and Q to quit.
 
-## Live version
+## Desktop webcam walkthrough
 
 1. Sit 1 to 2 m away, facing a fixed camera, with head, shoulders, and some background in view. Turn off fans and keep people out of the background.
 2. Sit still for about 30 seconds until a rate is reported.
-3. Cover your chest. The live rate disappears at once and the result turns amber.
+3. Obstruct the camera’s view of the chest and watch for the live rate to drop out as tracking or signal quality degrades.
 4. Press R, then V. With hands down, raise one and hold it.
 5. Press R and sway your whole body. It should refuse to call that breathing.
 
@@ -33,12 +41,11 @@ ostinato-sim scene 1001 --html data/medic.html
 
 Say that the map, people, and urgency cue are made up. The result to quote is the honest one: ranking people helps only if the robot has a real clue about who is urgent, and no such clue exists yet. See [SIMULATION.md](SIMULATION.md).
 
-## Do not say
+## Interpreting the demo
 
-- "It detects whether someone is alive" or "not breathing". It never reports either.
-- "Accurate to within half a breath". That is synthetic data. Accuracy on people has not been measured.
-- "51 seconds instead of 109". That needs an urgency cue that does not exist.
-- "Nobody else does this". Field-tested systems exist, including in the DARPA Triage Challenge.
+- A declined assessment or an unseen hand raise leaves breathing status and responsiveness unknown.
+- Reported benchmark errors describe accepted windows of synthetic motion. No accuracy results from trials on people have been published.
+- Simulated gains from prioritization depend on the urgency cue assigned to the simulated scene.
 
 ## Likely questions
 
@@ -48,6 +55,6 @@ Say that the map, people, and urgency cue are made up. The result to quote is th
 
 **Why refuse so often?** A wrong number can send help the wrong way. "Unable to assess" asks for a person instead.
 
-**Does it send video anywhere?** The desktop app does not save or send video.
+**Does it send video anywhere?** Both versions process video on your device. The browser downloads software and model files. Reports contain assessment results and decisions, with no video.
 
 **Where is the robot?** Navigation is simulated. Today a person moves the camera.
