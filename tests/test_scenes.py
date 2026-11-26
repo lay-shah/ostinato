@@ -24,7 +24,11 @@ def test_scene(scene, posture, seed):
 
 
 def test_summary_counts_any_shown_rate():
-    results = [("still", "lying", None, [None, 15.0]), ("still", "lying", None, [None]), ("breathing", "upright", 12.0, [None, 13.0])]
+    results = [
+        ("still", "lying", None, [None, 15.0]),
+        ("still", "lying", None, [None]),
+        ("breathing", "upright", 12.0, [None, 13.0]),
+    ]
     out = scenes.summarize(results)
     assert out["still, lying"] == {"clips": 2, "given_a_rate": 1}
     assert out["breathing, upright"]["largest_error"] == pytest.approx(1.0)

@@ -35,8 +35,9 @@ def summarize(pairs, tolerance_bpm=2.0):
     accepted = [reading for reading in readings if reading.bpm is not None]
     errors = [abs(reading.bpm - reading.reference_bpm) for reading in accepted]
     declined_first = [pair for pair in pairs if pair[0].bpm is None]
-    recovery_errors = [abs(second.bpm - second.reference_bpm) for _, second in declined_first
-                       if second.bpm is not None]
+    recovery_errors = [
+        abs(second.bpm - second.reference_bpm) for _, second in declined_first if second.bpm is not None
+    ]
     return {
         "recovery_tolerance_bpm": tolerance_bpm,
         "accurate_second_view_recoveries": sum(error <= tolerance_bpm for error in recovery_errors),
@@ -171,8 +172,13 @@ def simulate(name, sites, policy):
         if outcome == "usable":
             break
     success = events[-1]["result"] == "usable"
-    return {"scenario": name, "policy": policy, "events": events,
-            "time_to_reading_s": elapsed if success else None, "spent_s": elapsed}
+    return {
+        "scenario": name,
+        "policy": policy,
+        "events": events,
+        "time_to_reading_s": elapsed if success else None,
+        "spent_s": elapsed,
+    }
 
 
 def demo():
@@ -182,10 +188,14 @@ def demo():
         "clear view has weak signal": [("A", 1, True, "usable"), ("B", 4, False, "weak signal")],
         "neither usable": [("A", 1, True, "obstructed"), ("B", 4, False, "weak signal")],
     }
-    return {"source": "simulation", "runs": [
-        simulate(name, sites, policy) for name, sites in scenarios.items()
-        for policy in ("nearest-first", "visibility-first")
-    ]}
+    return {
+        "source": "simulation",
+        "runs": [
+            simulate(name, sites, policy)
+            for name, sites in scenarios.items()
+            for policy in ("nearest-first", "visibility-first")
+        ],
+    }
 
 
 def load_pair(path):
@@ -196,16 +206,25 @@ def load_pair(path):
     if len(pair) != 2 or len({row.view for row in pair}) != 2:
         raise ValueError(f"{path}: expected two distinct views")
     for row in pair:
-        if (not math.isfinite(row.elapsed_s) or row.elapsed_s <= 0
-                or type(row.counted_breaths) is not int or row.counted_breaths < 0
-                or (row.bpm is not None and not math.isfinite(row.bpm))):
+        if (
+            not math.isfinite(row.elapsed_s)
+            or row.elapsed_s <= 0
+            or type(row.counted_breaths) is not int
+            or row.counted_breaths < 0
+            or (row.bpm is not None and not math.isfinite(row.bpm))
+        ):
             raise ValueError(f"{path}: invalid observation")
         if not math.isfinite(row.signal_quality) or not 0 <= row.signal_quality <= 1:
             raise ValueError(f"{path}: invalid signal quality")
         previous = -1.0
         for t, bpm, quality, reason in row.trace:
-            if not (0 <= t <= row.elapsed_s and previous < t and 0 <= quality <= 1
-                    and (bpm is None or math.isfinite(bpm)) and isinstance(reason, str)):
+            if not (
+                0 <= t <= row.elapsed_s
+                and previous < t
+                and 0 <= quality <= 1
+                and (bpm is None or math.isfinite(bpm))
+                and isinstance(reason, str)
+            ):
                 raise ValueError(f"{path}: invalid sample in replay trace")
             previous = t
     if data["source"] != "paired-webcam-v3":
@@ -232,14 +251,26 @@ def replay(pair):
                 decision = assessor.update(now, Reading(bpm, quality, reason))
                 if decision.final or decision.action is Action.MOVE:
                     break
-            events.append({"view": view.view, "elapsed_s": now, "action": decision.action.value,
-                           "reason": decision.reason, "bpm": decision.bpm})
+            events.append(
+                {
+                    "view": view.view,
+                    "elapsed_s": now,
+                    "action": decision.action.value,
+                    "reason": decision.reason,
+                    "bpm": decision.bpm,
+                }
+            )
             if decision.action is not Action.MOVE:
                 break
             assessor.arrived(now)
             start = now
-        runs.append({"first_view": order[0].view, "events": events,
-                     "time_to_usable_s": now if decision.bpm is not None else None})
+        runs.append(
+            {
+                "first_view": order[0].view,
+                "events": events,
+                "time_to_usable_s": now if decision.bpm is not None else None,
+            }
+        )
     return {"source": "paired-trial replay", "modeled_travel_s": 0, "runs": runs}
 
 

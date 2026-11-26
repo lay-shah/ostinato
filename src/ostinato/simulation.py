@@ -98,7 +98,9 @@ def make_scene(seed, cue="useful", world=World()):
         facing = float(rng.uniform(-math.pi, math.pi))
         # Draw the same random numbers for every cue level, so scenes stay paired.
         cue_value = 0.5 + CUES[cue] * (1 if urgent else -1) + 0.25 * float(rng.normal())
-        known = Known(i, cell, facing + float(rng.normal(0, world.facing_error)), min(0.95, max(0.05, cue_value)))
+        known = Known(
+            i, cell, facing + float(rng.normal(0, world.facing_error)), min(0.95, max(0.05, cue_value))
+        )
         blocked = frozenset(int(v) for v in range(8) if rng.random() < world.hidden)
         bpm = float(rng.uniform(26, 38) if urgent else rng.uniform(10, 24))
         people.append(
@@ -196,7 +198,9 @@ def choose_person(candidates, cost, policy):
 
 def observe(person, index, seconds):
     """Simulated reading after `seconds` at a view."""
-    if index in person.blocked or angle_gap(person.facing, view_angle(index)) > math.radians(person.usable_degrees):
+    if index in person.blocked or angle_gap(person.facing, view_angle(index)) > math.radians(
+        person.usable_degrees
+    ):
         return Reading(None, 0.0, "chest not visible")
     if seconds < MIN_SECONDS:
         return Reading(None, 0.0, "need more data")
@@ -388,7 +392,10 @@ def sweep(seeds, cue="weak", progress=False):
             if progress:
                 print(f"{field} = {value}", file=sys.stderr, flush=True)
             out = compare(
-                seeds, cue, world=World(**{field: value}), policies=[("nearest", "nearest"), ("ranked", "predicted")]
+                seeds,
+                cue,
+                world=World(**{field: value}),
+                policies=[("nearest", "nearest"), ("ranked", "predicted")],
             )
             base, ours = out["policies"]
             rows.append({
@@ -423,9 +430,25 @@ def draw(scene, out, path):
             cv2.circle(img, (x, y), 14, (40, 40, 200), 2)
         label = f"P{p.known.id}" + (f" #{visit - sum(q['reached_s'] is None for q in out['results'])}"
                                     if r["reached_s"] is not None else " no path")  # fmt: skip
-        cv2.putText(img, label, (min(x + 12, N * s - 80), max(y - 10, 14)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (20, 20, 20), 1)
+        cv2.putText(
+            img,
+            label,
+            (min(x + 12, N * s - 80), max(y - 10, 14)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (20, 20, 20),
+            1,
+        )
     y = N * s + 22
-    cv2.putText(img, f"SIMULATED: {out['policy']}, {out['total_s']:.0f} s", (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 20, 20), 1)
+    cv2.putText(
+        img,
+        f"SIMULATED: {out['policy']}, {out['total_s']:.0f} s",
+        (8, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (20, 20, 20),
+        1,
+    )
     key = "green: measured  orange: unable to assess  red ring: truly urgent (hidden from robot)  #: visit order"
     cv2.putText(img, key, (8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (20, 20, 20), 1)
     if not cv2.imwrite(str(path), img):
@@ -471,7 +494,11 @@ def main(argv=None):
         Path(args.html).parent.mkdir(parents=True, exist_ok=True)
         Path(args.html).write_text(render(scene, out), encoding="utf-8")
     out.pop("track")
-    print(json.dumps({"source": "simulation", **out, "attention_order": rank_for_medics(out["results"])}, indent=2))
+    print(
+        json.dumps(
+            {"source": "simulation", **out, "attention_order": rank_for_medics(out["results"])}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":
