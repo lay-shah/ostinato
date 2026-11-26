@@ -95,6 +95,29 @@ def find_markers(gray, camera, size=MARKER):
     return found
 
 
+def ground(camera, pixel, height):
+    """Where a point seen at `pixel` is, if it lies `height` meters below the lens.
+    Returns a Sighting with marker -1, or None when the ray does not reach that far down."""
+    if not (height > 0 and all(map(math.isfinite, pixel))):
+        return None
+    point = np.array([[pixel]], np.float64)
+    x, y = cv2.undistortPoints(point, camera.matrix, camera.coefficients).ravel()
+    tilt = math.radians(camera.pitch)
+    ahead = math.cos(tilt) - y * math.sin(tilt)
+    down = y * math.cos(tilt) + math.sin(tilt)
+    if down < 0.05 * math.hypot(x, ahead) or ahead <= 0:
+        return None  # level with the horizon or above it: too far to tell
+    scale = height / down
+    right, ahead = x * scale, ahead * scale
+    return Sighting(-1, math.hypot(right, ahead), wrap(math.radians(camera.pan) - math.atan2(right, ahead)))
+
+
+def place(pose, sighting):
+    """A sighting's position in the room, from where the rover thinks it is."""
+    a = pose.heading + sighting.bearing
+    return pose.x + sighting.distance * math.cos(a), pose.y + sighting.distance * math.sin(a)
+
+
 class Localizer:
     """Extended Kalman filter over x, y, heading, and how far off each wheel is."""
 

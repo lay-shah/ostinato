@@ -216,3 +216,33 @@ def test_print(tmp_path, capsys):
     assert np.ptp(corners[0][0][:, 0]) * 4 / 300 * 25.4 == pytest.approx(160, abs=1.5)
     with pytest.raises(SystemExit):
         main(["--print", "50", "--output", str(out)])
+
+
+def project(camera, right, ahead, below):
+    """The pixel where a point `right`, `ahead` (level, from the lens), and `below` the lens appears."""
+    tilt = math.radians(camera.pitch)
+    y = below * math.cos(tilt) - ahead * math.sin(tilt)
+    z = below * math.sin(tilt) + ahead * math.cos(tilt)
+    pixel, _ = cv2.projectPoints(
+        np.array([[right, y, z]]), np.zeros(3), np.zeros(3), camera.matrix, camera.coefficients
+    )
+    return tuple(pixel.ravel())
+
+
+@pytest.mark.parametrize("pitch", [10, 25, 40])
+@pytest.mark.parametrize("right,ahead", [(0.0, 1.2), (0.4, 1.0), (-0.5, 1.6)])
+def test_ground_point(pitch, right, ahead):
+    camera = Camera(pitch=pitch, distortion=(-0.1, 0.02, 0, 0, 0))
+    seen = localize.ground(camera, project(camera, right, ahead, 0.65), 0.65)
+    assert seen.distance == pytest.approx(math.hypot(right, ahead), abs=0.005)
+    assert seen.bearing == pytest.approx(math.pi / 2 - math.atan2(right, ahead), abs=0.005)
+    x, y = localize.place(Pose(1.0, 2.0, 0.5), seen)
+    a = 0.5 + seen.bearing
+    assert (x, y) == pytest.approx((1 + seen.distance * math.cos(a), 2 + seen.distance * math.sin(a)))
+
+
+def test_ground_point_refuses_the_horizon():
+    camera = Camera(pitch=0)
+    assert localize.ground(camera, (640, 300), 0.6) is None
+    assert localize.ground(camera, (640, 700), 0) is None
+    assert localize.ground(camera, (math.nan, 700), 0.6) is None

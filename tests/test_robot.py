@@ -85,6 +85,22 @@ class Hardware:
                 found.append(Sighting(number, distance, bearing + self.rng.normal(0, 0.01)))
         return found
 
+    def chest(self, person, height):
+        """Where the person's chest appears, or None if outside the picture."""
+        from test_localize import project
+
+        from ostinato.robot import CHEST_HEIGHT
+
+        dx, dy = person[0] - self.pose.x, person[1] - self.pose.y
+        look = self.pose.heading + self.setup.camera.pan * math.pi / 180
+        ahead = dx * math.cos(look) + dy * math.sin(look)
+        right = dx * math.sin(look) - dy * math.cos(look)
+        if ahead <= 0.3:
+            return None
+        x, y = project(self.setup.camera, right, ahead, height - CHEST_HEIGHT)
+        x, y = x + self.rng.normal(0, 4), y + self.rng.normal(0, 4)
+        return (x, y) if 0 <= x < self.setup.camera.width and 0 <= y < self.setup.camera.height else None
+
     def close(self):
         self.board.kill()
 
@@ -95,17 +111,27 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
     hw = Hardware(program, setup, seed, trouble.pop("loss", 0.0))
     robot, dt, nearest, wrong = Robot(setup, hw), 0.05, math.inf, 0
     cut, estop, restart = trouble.get("cut"), trouble.get("estop"), trouble.get("restart")
+    really = trouble.get("really", setup.person)
     try:
         for i in range(int(seconds / dt)):
             t = i * dt
             if restart is not None and abs(t - restart) < dt / 2:
                 hw.ms0 = int(t * 1000)
             measuring = robot.mission.state is State.MEASURING
-            reading = Reading(15.0, 0.9, "ok") if measuring else None
+            reading = (
+                (
+                    Reading(15.0, 0.9, "ok")
+                    if trouble.get("breathing", True)
+                    else Reading(None, 0.0, "chest not visible")
+                )
+                if measuring
+                else None
+            )
             turning = hw.run(t, dt, cut=cut is not None and t > cut, estop=estop is not None and t > estop)
             late = [x for x in (cut, estop) if x is not None and t > x + 0.6]
             wrong += bool(turning and late)
-            robot.step(t, sightings=hw.sightings() if i % 10 == 0 else (), reading=reading)
+            chest = hw.chest(really, setup.lens_height) if measuring and setup.lens_height else None
+            robot.step(t, sightings=hw.sightings() if i % 10 == 0 else (), reading=reading, chest=chest)
             nearest = min(nearest, math.dist((hw.pose.x, hw.pose.y), setup.person))
             if robot.mission.state is until or robot.mission.state is State.DONE:
                 break
@@ -196,3 +222,38 @@ def test_without_markers_it_looks_once_then_stops(board_program, tmp_path):
         assert robot.mission.state is State.DONE and "a person must check" in robot.mission.outcome
         assert robot.searched >= 2 * math.pi and nearest > 1.5
         assert "no marker found" in robot.status()
+
+
+@pytest.fixture
+def mast(tmp_path):
+    path = tmp_path / "room.json"
+    path.write_text(json.dumps({**ROOM, "camera": {"fov": 70, "pitch": 30, "height": 0.8}}))
+    return Setup.load(path)
+
+
+def test_person_where_the_file_says(board_program, mast):
+    for seed in range(4):
+        robot, _, _ = drive(board_program, mast, seed, until=State.DONE)
+        assert robot.person_problem is None and len(robot.seen_person) == 15
+        assert "breaths/min" in robot.mission.outcome
+    # With no rate, it goes on to the next view, which it may: the person was seen in place.
+    robot, nearest, _ = drive(board_program, mast, 0, until=State.DONE, seconds=150, breathing=False)
+    assert robot.person_problem is None and robot.mission.view == 1 and nearest > KEEP_OUT
+
+
+@pytest.mark.parametrize("really", [(1.0, 0.0), (0.0, -0.9), (-0.7, 0.7), (0.9, 0.55)])
+def test_stops_when_the_person_is_elsewhere(board_program, mast, really):
+    """Seen in the wrong place, or not seen at all, which may mean beside the rover."""
+    robot, _, _ = drive(board_program, mast, 1, until=State.DONE, seconds=120, really=really, breathing=False)
+    assert robot.person_problem and robot.drive == STOP
+    # It never reached the second view: the wheels stayed still once it doubted.
+    assert [state for _, state, view in robot.mission.log if view == 1] in ([], ["driving", "done"])
+    assert "setup file says" in robot.status()
+
+
+def test_camera_height_is_checked(tmp_path):
+    path = tmp_path / "room.json"
+    for height in (0.1, 3, "high"):
+        path.write_text(json.dumps({**ROOM, "camera": {"fov": 70, "height": height}}))
+        with pytest.raises(ValueError):
+            Setup.load(path)
