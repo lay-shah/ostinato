@@ -86,7 +86,9 @@ class Monitor:
             self.reading = Reading(None, 0.0, self.tracking)
         elif t - self._last_estimate >= 1.0 or self.reading.reason == self.tracking:
             self._last_estimate = t
-            self.reading = estimate(*zip(*self.samples), self.background, self.head, self.sideways, self.sides)
+            self.reading = estimate(
+                *zip(*self.samples), self.background, self.head, self.sideways, self.sides
+            )
         return self.reading
 
 
@@ -145,7 +147,17 @@ def main(argv=None):
             elif assessor.wants_ask:
                 check.ask(t)
             view = EXTRA_VIEWS + 1 - assessor.views_left - (decision.action is Action.MOVE)
-            screen, _ = compose(frame, monitor, decision, check, view, EXTRA_VIEWS + 1, WINDOW, LABEL if demo else None, note if t < note_until else None)
+            screen, _ = compose(
+                frame,
+                monitor,
+                decision,
+                check,
+                view,
+                EXTRA_VIEWS + 1,
+                WINDOW,
+                LABEL if demo else None,
+                note if t < note_until else None,
+            )
             recorder.update(t, reading, decision, check, view)
             cv2.imshow(TITLE, screen)
             key = cv2.waitKey(1) & 0xFF
@@ -183,7 +195,10 @@ def main(argv=None):
     r = monitor.reading
     d = assessor.decision
     print(f"Decision: {d.action.value}, {d.status.value} ({d.reason})")
-    print(f"Last reading: {r.status}" + (f", {r.bpm:.1f} breaths/min" if r.bpm is not None else f" ({r.reason})"))
+    print(
+        f"Last reading: {r.status}"
+        + (f", {r.bpm:.1f} breaths/min" if r.bpm is not None else f" ({r.reason})")
+    )
 
 
 if __name__ == "__main__":

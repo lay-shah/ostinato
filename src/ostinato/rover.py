@@ -68,13 +68,16 @@ class Guard:
     def _refuse(self, t, want):
         if self.stopped:
             return "emergency stop"
-        for source in ("link", "sensors", "person"):
+        # Turning in place cannot bring it nearer the person, so that alone is allowed
+        # without knowing where the person is, for example to look for a marker.
+        needed = ("link", "sensors", "person") if want.speed else ("link", "sensors")
+        for source in needed:
             heard = self._heard.get(source)
             if heard is None or not 0 <= t - heard <= QUIET:
                 return f"no news from {source}"
         if not (math.isfinite(want.speed) and math.isfinite(want.turn)):
             return "invalid command"
-        if math.isnan(self._front) or math.isnan(self._rear) or math.isnan(self._person):
+        if math.isnan(self._front) or math.isnan(self._rear) or (want.speed and math.isnan(self._person)):
             return "invalid sensor"
         if want.speed > 0 and not self._front >= OBSTACLE:
             return "obstacle ahead"

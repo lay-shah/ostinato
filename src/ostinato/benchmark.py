@@ -58,7 +58,13 @@ NOT_BREATHING_MOTION = {
 
 
 def run(trials=200, seed=0):
-    out = {"source": "synthetic benchmark", "trials": trials, "seed": seed, "breathing": {}, "other_motion": {}}
+    out = {
+        "source": "synthetic benchmark",
+        "trials": trials,
+        "seed": seed,
+        "breathing": {},
+        "other_motion": {},
+    }
     for name, (timing, depth, pause) in PATTERNS.items():
         errors = []
         for i in range(trials):
@@ -74,7 +80,9 @@ def run(trials=200, seed=0):
             "largest_error": float(max(errors)) if errors else None,
         }
     for name, make in NOT_BREATHING_MOTION.items():
-        hits = sum(estimate(TIMES, make(np.random.default_rng([seed, 2, i]))).bpm is not None for i in range(trials))
+        hits = sum(
+            estimate(TIMES, make(np.random.default_rng([seed, 2, i]))).bpm is not None for i in range(trials)
+        )
         out["other_motion"][name] = {"false_rates": hits / trials}
     for bpm in (8, 12, 16, 24, 32):
         kept = {}

@@ -1,37 +1,16 @@
 import math
 import random
-import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from ostinato.motors import Board, Report, parse, seal, wheels
 from ostinato.rover import STOP, Drive, Guard
 
-FIRMWARE = Path(__file__).parents[1] / "firmware"
-CXX = shutil.which("c++") or shutil.which("g++")
-
 
 @pytest.fixture(scope="module")
-def run(tmp_path_factory):
-    if CXX is None:
-        pytest.skip("no C++ compiler")
-    program = tmp_path_factory.mktemp("board") / "check"
-    subprocess.run(
-        [
-            CXX,
-            "-std=c++11",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-fsanitize=undefined",
-            "-o",
-            program,
-            FIRMWARE / "check.cpp",
-        ],
-        check=True,
-    )
+def run(board_program):
+    program = board_program
 
     def run(events):
         """events: (ms, bytes) to receive or (ms, estop) for a control step."""

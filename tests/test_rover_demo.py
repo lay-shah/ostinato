@@ -26,7 +26,11 @@ def test_simulated_run_moves_to_a_second_view_and_measures():
 def test_screen_shows_every_state(monkeypatch):
     drawn = []
     real = rover_demo.ImageDraw.ImageDraw.text
-    monkeypatch.setattr(rover_demo.ImageDraw.ImageDraw, "text", lambda self, xy, text, **k: (drawn.append(text), real(self, xy, text, **k)))
+    monkeypatch.setattr(
+        rover_demo.ImageDraw.ImageDraw,
+        "text",
+        lambda self, xy, text, **k: (drawn.append(text), real(self, xy, text, **k)),
+    )
     demo = RoverDemo()
     for i in range(330):
         demo.step()

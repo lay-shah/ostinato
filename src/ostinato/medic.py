@@ -60,7 +60,9 @@ def detail(result):
 
 def _map(scene, out, order):
     size = N * S
-    parts = [f'<svg viewBox="0 0 {size} {size}" role="group" aria-label="Search map with links to ranked assessments">']
+    parts = [
+        f'<svg viewBox="0 0 {size} {size}" role="group" aria-label="Search map with links to ranked assessments">'
+    ]
     for r in range(N):
         c = 0
         while c < N:
@@ -78,7 +80,9 @@ def _map(scene, out, order):
         return cell[1] * S + S // 2, cell[0] * S + S // 2
 
     track = " ".join("{},{}".format(*xy(c)) for c in out["track"])
-    parts.append(f'<polyline points="{track}" fill="none" stroke="var(--path)" stroke-width="2" stroke-dasharray="6 4"/>')
+    parts.append(
+        f'<polyline points="{track}" fill="none" stroke="var(--path)" stroke-width="2" stroke-dasharray="6 4"/>'
+    )
     x, y = xy(scene.start)
     parts.append(f'<rect x="{x - 8}" y="{y - 8}" width="16" height="16" fill="var(--path)"/>')
     cells = {p.known.id: p.known.cell for p in scene.people}
@@ -103,20 +107,28 @@ def render(scene, out):
         r = by_id[row["person"]]
         g = group(r)
         cell = cells[row["person"]]
-        facts = [f"Person {r['person']}", f"{cell[1] * CELL:.0f} m east, {cell[0] * CELL:.0f} m south of the start"]
+        facts = [
+            f"Person {r['person']}",
+            f"{cell[1] * CELL:.0f} m east, {cell[0] * CELL:.0f} m south of the start",
+        ]
         if r["reached_s"] is None:
             facts.append("not reached")
         else:
             n = len(r["views"])
             facts += [f"Reached at {r['reached_s']:.0f} s", f"{n} view{'s' if n != 1 else ''} tried"]
-        score = "no signal score" if r["score"] is None else f"signal score {r['score']:.2f} (fixed in simulation)"
+        score = (
+            "no signal score"
+            if r["score"] is None
+            else f"signal score {r['score']:.2f} (fixed in simulation)"
+        )
         items.append(
             f'<li class="{g}" id="assessment-{rank}" tabindex="-1"><span class="n">{rank}</span><div><b class="c-{g}">{headline(r)}</b>'
             f'<p>{escape(detail(r))}</p><p class="dim">{escape(" · ".join([*facts, score]))}</p></div></li>'
         )
     groups = [group(r) for r in out["results"]]
     stats = "".join(
-        f'<div><b class="c-{g}">{groups.count(g)}</b><span class="dim">{LABELS[g]}</span></div>' for g in LABELS
+        f'<div><b class="c-{g}">{groups.count(g)}</b><span class="dim">{LABELS[g]}</span></div>'
+        for g in LABELS
     )
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -125,7 +137,7 @@ def render(scene, out):
         f"<title>Ostinato medic view (simulated)</title><style>{CSS}</style></head><body><main>"
         '<header><span class="brand">Ostinato<i>.</i></span><nav aria-label="Report sections">'
         '<a href="#map">Map</a><a href="#assessments">Assessments</a></nav></header>'
-        '<h1>Search assessment</h1>'
+        "<h1>Search assessment</h1>"
         '<p class="sim">SIMULATED DATA. Research prototype, not a medical device or a triage method.</p>'
         f'<div class="stats">{stats}</div>'
         '<p class="note">"Needs a human check" means the robot could not measure. It says nothing about whether '

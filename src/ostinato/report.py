@@ -76,10 +76,14 @@ def _chart(readings):
             x, y = run[0].split(",")
             parts.append(f'<circle cx="{x}" cy="{y}" r="3" fill="var(--ok)"/>')
         elif run:
-            parts.append(f'<polyline points="{" ".join(run)}" fill="none" stroke="var(--ok)" stroke-width="3"/>')
+            parts.append(
+                f'<polyline points="{" ".join(run)}" fill="none" stroke="var(--ok)" stroke-width="3"/>'
+            )
         run = []
     parts.append('<text x="36" y="194" font-size="12" fill="var(--dim)">0 s</text>')
-    parts.append(f'<text x="750" y="194" font-size="12" text-anchor="end" fill="var(--dim)">{end:.0f} s</text></svg>')
+    parts.append(
+        f'<text x="750" y="194" font-size="12" text-anchor="end" fill="var(--dim)">{end:.0f} s</text></svg>'
+    )
     return "".join(parts)
 
 
@@ -127,7 +131,8 @@ def render(recorder, when):
             counts[reason] = counts.get(reason, 0) + 1
     rows = "".join(f"<tr><td>{t:.0f} s</td><td>{escape(text)}</td></tr>" for t, text in recorder.events)
     why = "".join(
-        f"<tr><td>{n} s</td><td>{escape(reason)}</td></tr>" for reason, n in sorted(counts.items(), key=lambda x: -x[1])
+        f"<tr><td>{n} s</td><td>{escape(reason)}</td></tr>"
+        for reason, n in sorted(counts.items(), key=lambda x: -x[1])
     )
     label = f'<p class="warn"><b>{escape(recorder.label)}</b></p>' if recorder.label else ""
     measured = sum(r[1] is not None for r in recorder.readings)
