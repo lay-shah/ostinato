@@ -40,11 +40,21 @@ class Camera:
     fov: float = 70.0  # degrees across
     pitch: float = 0.0  # degrees downward
     pan: float = 90.0  # degrees left of forward
+    # From `python -m ostinato.calibrate`. Without them the lens is assumed perfect.
+    focal: tuple[float, float] | None = None  # px
+    center: tuple[float, float] | None = None  # px
+    distortion: tuple[float, ...] = ()
 
     @property
     def matrix(self):
         f = self.width / 2 / math.tan(math.radians(self.fov) / 2)
-        return np.array([[f, 0, self.width / 2], [0, f, self.height / 2], [0, 0, 1.0]])
+        fx, fy = self.focal or (f, f)
+        cx, cy = self.center or (self.width / 2, self.height / 2)
+        return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]])
+
+    @property
+    def coefficients(self):
+        return np.array(self.distortion, float) if self.distortion else None
 
 
 @dataclass(frozen=True)
@@ -72,7 +82,9 @@ def find_markers(gray, camera, size=MARKER):
     for marker, quad in zip(ids, corners):
         if ids.count(marker) > 1:
             continue  # two copies: no telling which is which
-        ok, _, place = cv2.solvePnP(square, quad[0], camera.matrix, None, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+        ok, _, place = cv2.solvePnP(
+            square, quad[0], camera.matrix, camera.coefficients, flags=cv2.SOLVEPNP_IPPE_SQUARE
+        )
         if not ok or not np.isfinite(place).all():
             continue
         right, down, ahead = place.ravel()
