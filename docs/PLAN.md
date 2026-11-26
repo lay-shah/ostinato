@@ -7,7 +7,7 @@
 | 3. Simulation | Robot chooses viewpoints and is compared with nearest-first search | Built; needs a real urgency cue |
 | 4. Medic view | Ranked map shows confidence and reasons | Built |
 | 5. Validation | Results against hand-counted breaths at two distances are reported | Tools built; no trials yet |
-| 6. Rover | Drives to a person, stops, and measures | [Planned](ROBOT.md); drive control simulated only |
+| 6. Rover | Drives to a person, stops, and measures | [Software written](ROBOT.md) and tested in simulation; nothing built |
 
 ## Measures
 
