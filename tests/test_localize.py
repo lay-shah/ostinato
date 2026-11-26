@@ -6,42 +6,14 @@ import pytest
 
 from ostinato import localize
 from ostinato.localize import Camera, Localizer, Sighting, find_markers, main, sheet
+from ostinato.marker_range import draw
 from ostinato.rover import KEEP_OUT, STOP, Drive, Guard, Mission, Pose, SimulatedBase, State, wrap
 
 MARKERS = {1: (0.0, 3.0), 2: (3.0, 0.0), 3: (0.0, -3.0), 4: (-3.0, 0.0)}
 TRACK = 0.3
 
 
-def picture(camera, places, size=localize.MARKER, blur=0.0, noise=0.0):
-    """Draw markers as the camera would see them. places: (id, right, down, ahead, yaw)
-    in meters along the ground from the camera."""
-    ss = 2
-    w, h = camera.width * ss, camera.height * ss
-    image = np.full((h, w), 150, np.uint8)
-    tilt = math.radians(camera.pitch)
-    for marker, right, down, ahead, yaw in places:
-        code = cv2.aruco.generateImageMarker(
-            cv2.aruco.getPredefinedDictionary(localize.DICTIONARY), marker, 600
-        )
-        code = cv2.copyMakeBorder(code, 120, 120, 120, 120, cv2.BORDER_CONSTANT, value=255)
-        half = size / 2 * 840 / 600
-        quad = []
-        for u, v in ((-half, -half), (half, -half), (half, half), (-half, half)):
-            x, y, z = right + u * math.cos(yaw), down + v, ahead + u * math.sin(yaw)
-            y, z = y * math.cos(tilt) - z * math.sin(tilt), y * math.sin(tilt) + z * math.cos(tilt)
-            px = camera.matrix @ [x, y, z]
-            quad.append(px[:2] / px[2] * ss)
-        # Corners are the outer edges of the first and last pixels.
-        source = np.float32([[-0.5, -0.5], [839.5, -0.5], [839.5, 839.5], [-0.5, 839.5]])
-        m = cv2.getPerspectiveTransform(source, np.float32(quad) - 0.5)
-        warped = cv2.warpPerspective(code, m, (w, h), flags=cv2.INTER_AREA)
-        inside = cv2.warpPerspective(np.full_like(code, 255), m, (w, h))
-        image[inside > 127] = warped[inside > 127]
-    image = cv2.resize(image, (camera.width, camera.height), interpolation=cv2.INTER_AREA).astype(float)
-    if blur:
-        image = cv2.GaussianBlur(image, (0, 0), blur)
-    image += np.random.default_rng(0).normal(0, noise, image.shape)
-    return np.clip(image, 0, 255).astype(np.uint8)
+picture = draw  # also used by test_calibrate
 
 
 @pytest.mark.parametrize("pitch", [0, 25])

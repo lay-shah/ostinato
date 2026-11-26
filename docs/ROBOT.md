@@ -70,6 +70,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | Command | What it does |
 |---|---|
 | `python -m ostinato.localize --print 1 2 3 4` | Markers to print and tape upright around the room |
+| `python -m ostinato.marker_range`, also `--blur 2 --light 0.3 --noise 10` | How far a drawn marker is read, sharp or blurred, lit or dim, and how far off |
 | `python -m ostinato.calibrate --print`, then `--square 25` | Measures the camera's lens with a printed board |
 | `python -m ostinato.bench --port …` | First power-on checks, wheels off the ground; `--measure` finds counts per meter |
 | `python -m ostinato.robot --setup room.json --check` | Checks a setup file: start too near the person, a viewpoint with no marker in view, a marker on the path |
@@ -83,7 +84,7 @@ The setup file holds a person's measurements: where the rover starts, where the 
 
 ## Knowing where it is
 
-It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. A person still has to place it at the start and measure where the casualty and the markers are: it does not find people by itself.
+It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. Turn each marker to face the viewpoints that use it: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. A person still has to place it at the start and measure where the casualty and the markers are: it does not find people by itself.
 
 ## Tested so far, in simulation only
 
@@ -92,6 +93,7 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 - Against the compiled board code, 300 of 300 drives reached the first viewpoint, including with 30% of messages lost or damaged, and none came nearer than 1.2 m. Hiding markers beyond 4 m changed nothing in 120 more drives.
 - With no marker in sight, it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again.
 - The person check caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
+- Drawn markers, 16 cm, read by a 720p 70 degree camera: facing it, reliably to 6 m when sharp and 5 m when blurred (2 px), with distances off by 1-3% and directions by about 0.001 rad. That is inside what the position estimate assumes (4% and 0.02 rad) to about 4 m. Turned 50 degrees away and blurred, only to about 3 m, and blurred in a dim room, 2 m. The setup check counts every marker within 4.9 m as seen, whichever way it faces.
 - The board program, on simulated motors 15% weaker than it assumes, held speed within 5% and stopped within about 0.5 s of silence.
 
 ## Still unknown
