@@ -118,8 +118,9 @@ class Listener:
             if not go:
                 guard.emergency_stop()
             self.go, self.heard = go, t
-        if self.heard is not None and self.go and t - self.heard <= EVERY * 3:
-            guard.link(t)
+        if self.heard is not None and self.go:
+            # The time of the heartbeat itself, so that the guard's 0.5 s runs from it.
+            guard.link(self.heard)
         return self.heard is not None and t - self.heard <= EVERY * 3
 
     def _reply(self, sender, status):
