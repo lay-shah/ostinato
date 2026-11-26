@@ -4,7 +4,7 @@ import stat
 
 import pytest
 
-from ostinato.accuracy import analyze, main, render, wilson
+from ostinato.accuracy import analyze, compare_lines, main, render, wilson
 from ostinato.viewpoints import Observation
 
 
@@ -70,3 +70,39 @@ def test_command(tmp_path, capsys):
         main([str(trial), "--html", str(page)])  # never overwrites
     with pytest.raises(SystemExit):
         main([str(trial), str(trial)])
+
+
+def test_each_view_on_its_own():
+    v = analyze(PAIRS)["by_view"]
+    assert (v["A"]["reported"], v["A"]["windows"], v["B"]["reported"]) == (2, 3, 2)
+    assert v["A"]["mean_absolute_error"] == pytest.approx(0.0)
+    assert v["B"]["mean_absolute_error"] == pytest.approx(1.0)
+    assert v["B"]["bias"] == pytest.approx(0.0) and v["A"]["within_tolerance"] == 1
+    lone = analyze([(window(None, 8), window(15.0, 8, "B"))])["by_view"]["A"]
+    assert lone["reported"] == 0 and lone["mean_absolute_error"] is None
+
+
+def test_views_compared_trial_by_trial():
+    pairs = [*PAIRS, (window(None, 8), window(None, 8, "B")), (window(16.2, 8), window(16.0, 8, "B"))]
+    (h,) = analyze(pairs)["head_to_head"].values()
+    assert h == {
+        "trials": 5,
+        "both": 2,
+        "closer": {"A": 1, "B": 0},
+        "tied": 1,
+        "only": {"A": 1, "B": 1},
+        "neither": 1,
+    }
+    text = " ".join(compare_lines(analyze(pairs)))
+    assert "A vs B, 5 trials: both gave a rate in 2; A was closer in 1, B in 0" in text
+    assert "Only A gave a rate in 1. Only B gave a rate in 1. Neither did in 1." in text
+    page = render(analyze(pairs))
+    assert "By camera position" in page and "A vs B, 5 trials" in page
+
+
+def test_views_from_different_postures_are_kept_apart():
+    lying = (window(15.0, 8, "side-low"), window(12.0, 8, "side-high"))
+    result = analyze([*PAIRS, lying])
+    assert set(result["by_view"]) == {"A", "B", "side-high", "side-low"}
+    assert set(result["head_to_head"]) == {"A vs B", "side-high vs side-low"}
+    assert result["head_to_head"]["side-high vs side-low"]["closer"] == {"side-high": 0, "side-low": 1}
