@@ -37,9 +37,7 @@ class PoseFinder:
             return None
         marks = result.pose_landmarks.landmark
         h, w = bgr.shape[:2]
-        self.body = body_from_landmarks(
-            [(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks], (w, h)
-        )
+        self.body = body_from_landmarks([(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks], (w, h))
         if min(marks[11].visibility, marks[12].visibility) < MIN_VISIBILITY:
             return None
         return np.array([[marks[i].x * w, marks[i].y * h] for i in (11, 12, 23, 24)])

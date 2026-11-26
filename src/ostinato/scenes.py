@@ -42,25 +42,13 @@ def texture(rng):
 
 def person(rng, posture):
     """Return landmarks, a body mask, a head mask, and the unit vector to the hips."""
-    angle = np.radians(
-        rng.uniform(-15, 15) if posture == "upright" else rng.choice([-1, 1]) * rng.uniform(60, 120)
-    )
+    angle = np.radians(rng.uniform(-15, 15) if posture == "upright" else rng.choice([-1, 1]) * rng.uniform(60, 120))
     down, across = np.array([-np.sin(angle), np.cos(angle)]), np.array([np.cos(angle), np.sin(angle)])
     if posture == "lying":
         across = across * rng.uniform(0.55, 1.0)  # shoulders overlap when seen from the side
     top = np.array([320, 240]) - 85 * down
-    points = [
-        top + 65 * across,
-        top - 65 * across,
-        top + 190 * down + 45 * across,
-        top + 190 * down - 45 * across,
-    ]
-    outline = [
-        top - 85 * across,
-        top + 85 * across,
-        top + 200 * down + 75 * across,
-        top + 200 * down - 75 * across,
-    ]
+    points = [top + 65 * across, top - 65 * across, top + 190 * down + 45 * across, top + 190 * down - 45 * across]
+    outline = [top - 85 * across, top + 85 * across, top + 200 * down + 75 * across, top + 200 * down - 75 * across]
     body, head = (np.zeros((SIZE[1], SIZE[0]), np.uint8) for _ in range(2))
     cv2.fillPoly(body, [np.int32(outline)], 1)
     cv2.circle(head, np.int32(top - 70 * down).tolist(), 42, 1, -1)
@@ -83,21 +71,13 @@ def run(task):
     y, x = np.mgrid[0 : SIZE[1], 0 : SIZE[0]].astype(np.float32)
     # The chest rises most, and the belly less.
     along = (x - points[:2].mean(0)[0]) * down[0] + (y - points[:2].mean(0)[1]) * down[1]
-    chest = cv2.GaussianBlur(
-        (np.clip(1 - ((along - 60) / 130) ** 2, 0, 1) * body).astype(np.float32), (0, 0), 5
-    )
+    chest = cv2.GaussianBlur((np.clip(1 - ((along - 60) / 130) ** 2, 0, 1) * body).astype(np.float32), (0, 0), 5)
     whole = cv2.GaussianBlur(((body | head) > 0).astype(np.float32), (0, 0), 3)
     person_only = whole > 0.5
     pivot, ripple = 320 + rng.uniform(-60, 60), rng.uniform(25, 120)
 
     def move(image, dx, dy):
-        return cv2.remap(
-            image,
-            (x - dx).astype(np.float32),
-            (y - dy).astype(np.float32),
-            cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_REFLECT,
-        )
+        return cv2.remap(image, (x - dx).astype(np.float32), (y - dy).astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
     monitor, shown = Monitor(ChestTracker(lambda frame: points + rng.normal(0, 0.4, points.shape))), []
     for i in range(SECONDS * FPS):

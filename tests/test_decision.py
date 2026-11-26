@@ -144,11 +144,7 @@ def test_random_sequences_always_finish_safely():
     for _ in range(200):
         a, t, measured = Assessor(0, int(rng.integers(0, 4))), 0.0, set()
         while not a.decision.final:
-            r = (
-                Reading(float(rng.uniform(6, 42)), 0.9, "ok")
-                if rng.random() < 0.3
-                else bad(rng.choice(reasons))
-            )
+            r = Reading(float(rng.uniform(6, 42)), 0.9, "ok") if rng.random() < 0.3 else bad(rng.choice(reasons))
             measured.add(r.bpm)
             d = a.update(t, r)
             if d.action is Action.MOVE and rng.random() < 0.3:

@@ -48,12 +48,7 @@ def test_enough_windows_drops_the_preliminary_note():
 
 
 def test_view_names_are_escaped():
-    assert (
-        "<b>"
-        not in re.findall(
-            r"<title>(.*?)</title></circle>", render(analyze([(window(15, 8, "<b>"), window(15, 8, "B"))]))
-        )[0]
-    )
+    assert "<b>" not in re.findall(r"<title>(.*?)</title></circle>", render(analyze([(window(15, 8, "<b>"), window(15, 8, "B"))])))[0]
 
 
 def test_bad_input():
@@ -64,10 +59,7 @@ def test_bad_input():
 
 
 def test_command(tmp_path, capsys):
-    rows = [
-        {"view": v, "elapsed_s": 30, "bpm": 16, "signal_quality": 0.9, "reason": "ok", "counted_breaths": 8}
-        for v in "AB"
-    ]
+    rows = [{"view": v, "elapsed_s": 30, "bpm": 16, "signal_quality": 0.9, "reason": "ok", "counted_breaths": 8} for v in "AB"]
     trial = tmp_path / "pair.json"
     trial.write_text(json.dumps({"source": "paired-webcam-v1", "observations": rows}))
     page = tmp_path / "out" / "a.html"
