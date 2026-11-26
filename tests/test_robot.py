@@ -380,3 +380,41 @@ def test_program_follows_the_remote(program, tmp_path):
     # Within 0.5 s of the last heartbeat, it stops and stays stopped.
     late = [d for d, at in zip(port.sent, port.times) if at > last[-1] + 0.55]
     assert late and not any(moving(d) for d in late)
+
+
+def setup_with(tmp_path, **change):
+    path = tmp_path / "room.json"
+    path.write_text(json.dumps({**ROOM, **change}))
+    return Setup.load(path)
+
+
+def test_setup_check(tmp_path):
+    from ostinato.robot import check_setup
+
+    errors, warnings = check_setup(setup_with(tmp_path))
+    assert errors == [] and all("only marker" in w for w in warnings)
+    errors, _ = check_setup(setup_with(tmp_path, start=[0.8, 0, 0]))
+    assert any("start is 0.80 m" in e for e in errors)
+    errors, _ = check_setup(setup_with(tmp_path, markers={"1": [5, 0]}))
+    assert [e for e in errors if "sees no marker" in e] and len(errors) == 2
+    errors, _ = check_setup(setup_with(tmp_path, markers={**ROOM["markers"], "5": [1.3, 0]}))
+    assert any("marker 5 is on the rover's path" in e for e in errors)
+    _, warnings = check_setup(setup_with(tmp_path, views=[30, 40]))
+    assert any("within 20 degrees" in w for w in warnings)
+    # A marker too small in the picture does not count.
+    errors, _ = check_setup(setup_with(tmp_path, markers={"4": [-9, 0], "2": [9, 0]}))
+    assert sum("sees no marker" in e for e in errors) == 2
+
+
+def test_check_command(tmp_path, capsys):
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(ROOM))
+    main(["--setup", str(good), "--check"])
+    assert "No problems found." in capsys.readouterr().out
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({**ROOM, "markers": {"1": [5, 0]}}))
+    with pytest.raises(SystemExit):
+        main(["--setup", str(bad), "--check"])
+    assert "Problem: view 1 sees no marker" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(["--setup", str(good)])

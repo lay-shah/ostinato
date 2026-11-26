@@ -15,7 +15,8 @@ The setup file, in meters and degrees, measured by a person:
 lens's angle across, and distances to markers are rougher.
 
 "start" is where the rover is placed and which way it faces. "views" are directions
-around the person, from the person, to measure from in order. "height" is the lens's
+around the person, from the person, to measure from in order. Check a file with
+`python -m ostinato.robot --setup room.json --check` before driving. "height" is the lens's
 height above the floor. With it, the camera checks that the person is where the file
 says, and the rover stops if not.
 """
@@ -31,9 +32,9 @@ from pathlib import Path
 import numpy as np
 
 from .calibrate import Calibration
-from .localize import Camera, Localizer, find_markers, ground, place
+from .localize import MARKER, Camera, Localizer, find_markers, ground, place
 from .motors import Board
-from .rover import STOP, Drive, Guard, Mission, Pose, State
+from .rover import KEEP_OUT, RING, STOP, Drive, Guard, Mission, Pose, State, wrap
 
 CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
 MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
@@ -94,6 +95,45 @@ class Setup:
         if not 0 < setup.camera.fov < 170 or abs(setup.camera.pitch) > 60:
             raise ValueError("setup file: check the camera")
         return setup
+
+
+MIN_PIXELS = 30  # a marker smaller than this in the picture is often missed
+
+
+def check_setup(setup):
+    """Problems with a setup file, before driving. Returns (errors, warnings)."""
+    errors, warnings = [], []
+    px, py = setup.person
+    gap = math.dist((setup.start.x, setup.start.y), setup.person)
+    if gap < RING:
+        errors.append(f"the start is {gap:.2f} m from the person; it must be at least {RING} m away")
+    half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
+    sees = setup.camera.matrix[0, 0] * MARKER / MIN_PIXELS
+    for i, bearing in enumerate(setup.views, 1):
+        x, y = px + RING * math.cos(bearing), py + RING * math.sin(bearing)
+        facing = math.atan2(py - y, px - x)  # the camera's direction there
+        seen = [
+            n
+            for n, (mx, my) in setup.markers.items()
+            if 0.5 < math.dist((x, y), (mx, my)) < sees
+            and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
+        ]
+        if seen:
+            warnings += (
+                [] if len(seen) > 1 else [f"view {i} sees only marker {seen[0]}; two make a better fix"]
+            )
+        else:
+            errors.append(f"view {i} sees no marker: put one beyond the person, as seen from there")
+    for a, b in zip(setup.views, setup.views[1:]):
+        if abs(wrap(a - b)) < math.radians(20):
+            warnings.append("two views are within 20 degrees of each other and see much the same")
+    for n, (mx, my) in setup.markers.items():
+        ring = abs(math.dist((mx, my), setup.person) - RING)
+        if ring < 0.35:
+            errors.append(f"marker {n} is on the rover's path around the person; move it")
+        elif math.dist((mx, my), setup.person) < KEEP_OUT:
+            warnings.append(f"marker {n} is close to the person; check it does not touch them")
+    return errors, warnings
 
 
 class Robot:
@@ -218,12 +258,28 @@ def main(argv=None):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--setup", type=Path, required=True)
-    parser.add_argument("--port", required=True, help="the motor board's serial port")
+    parser.add_argument("--port", help="the motor board's serial port")
+    parser.add_argument("--check", action="store_true", help="only check the setup file")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
     args = parser.parse_args(argv)
     from .remote import Listener, load_key
 
+    if args.check:
+        try:
+            errors, warnings = check_setup(Setup.load(args.setup))
+        except ValueError as error:
+            parser.exit(1, f"{error}\n")
+        for line in errors:
+            print(f"Problem: {line}")
+        for line in warnings:
+            print(f"Note: {line}")
+        print("Fix the problems before driving." if errors else "No problems found.")
+        if errors:
+            parser.exit(1)
+        return
+    if not args.port:
+        parser.error("--port is needed, except with --check")
     listener = None
     try:
         setup = Setup.load(args.setup)
@@ -246,7 +302,9 @@ def main(argv=None):
     robot.guard.emergency_stop()
     title, start, was = "Ostinato rover", time.monotonic(), None
     if listener:
-        print(f"Stopped. Waiting for the remote on port {listener.port}. Keep the hardware emergency stop in hand.")
+        print(
+            f"Stopped. Waiting for the remote on port {listener.port}. Keep the hardware emergency stop in hand."
+        )
     else:
         print("No --key: only for testing on a stand or tethered. G go, Space stop, Q quit.")
     try:
