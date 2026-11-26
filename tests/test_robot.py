@@ -418,3 +418,67 @@ def test_check_command(tmp_path, capsys):
     assert "Problem: view 1 sees no marker" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         main(["--setup", str(good)])
+
+
+def test_run_log(program, tmp_path, capsys):
+    log = tmp_path / "logs" / "run.jsonl"
+    program(Camera(40, each=lambda n: time.sleep(0.03)), keys=[ord("g")], extra=["--log", str(log)])
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert len(rows) >= 2 and {"x", "y", "within", "guard", "state", "markers", "outcome"} <= rows[0].keys()
+    assert all(isinstance(r["markers"], list) for r in rows)
+    capsys.readouterr()
+    main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])
+    out = capsys.readouterr().out
+    assert "driven" in out and "Nearest to the person" in out and "Ended driving" in out
+    # A log is never overwritten.
+    with pytest.raises(SystemExit):
+        program(Camera(5), extra=["--log", str(log)])
+
+
+def test_replay_summary(tmp_path):
+    from ostinato.robot import summarize
+
+    rows = [
+        {
+            "t": 0,
+            "x": 2.4,
+            "y": 0.3,
+            "within": 0.1,
+            "lost": False,
+            "problem": None,
+            "guard": "emergency stop",
+            "state": "driving",
+            "outcome": "in progress",
+        },
+        {
+            "t": 0.5,
+            "x": 2.0,
+            "y": 0.3,
+            "within": 0.05,
+            "lost": False,
+            "problem": None,
+            "guard": "ok",
+            "state": "driving",
+            "outcome": "in progress",
+        },
+        {
+            "t": 1.0,
+            "x": 1.4,
+            "y": 0.3,
+            "within": 0.05,
+            "lost": True,
+            "problem": "the person is not where the setup file says",
+            "guard": "no news from person",
+            "state": "done",
+            "outcome": "could not reach any viewpoint: a person must check",
+        },
+    ]
+    path = tmp_path / "run.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows))
+    text = summarize(path, setup_with(tmp_path))
+    assert "about 1.0 m driven" in text and "1.33 m" in text
+    assert "Lost its position at 1 s" in text and "Stopped because the person" in text
+    assert "emergency stop: 0.5 s" in text
+    path.write_text("{broken")
+    with pytest.raises(ValueError):
+        summarize(path, setup_with(tmp_path))

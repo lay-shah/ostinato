@@ -27,6 +27,7 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -151,6 +152,7 @@ class Robot:
         self.confirmed = 0  # sightings of the person in place at this viewpoint
         self.person_problem = None
         self.searched = 0.0  # radians turned looking for a marker since it was last sure
+        self.seen = []  # markers believed in the last step
 
     def step(self, t, link=True, sightings=(), reading=None, responded=False, asking=False, chest=None):
         """`link` is whether the operator is there. `chest` is the middle of the person's
@@ -168,8 +170,7 @@ class Robot:
             per = self.setup.ticks_per_meter
             self.localizer.drive((report.left - last.left) / per, (report.right - last.right) / per)
             self.moving = (report.left, report.right) != (last.left, last.right)
-        for sighting in sightings:
-            self.localizer.see(sighting)
+        self.seen = [s.marker for s in sightings if self.localizer.see(s)]
         self._check_person(chest)
         self.localizer.tell(self.guard, t, self.setup.person)
         moving = self.moving or self.drive != STOP
@@ -219,6 +220,31 @@ class Robot:
         last = getattr(self, "_t", None)
         return 0.0 if last is None else max(0.0, t - last)
 
+    def record(self, t):
+        """One line for the run log: where it thinks it is and why it did what it did.
+        No pictures."""
+        pose, place = self.localizer.pose, self.localizer.uncertainty[0]
+        report = self.board._report
+        return {
+            "t": round(t, 3),
+            "x": round(pose.x, 3),
+            "y": round(pose.y, 3),
+            "heading": round(pose.heading, 3),
+            "within": round(place, 3),
+            "good": self.localizer.good,
+            "lost": self.localizer.lost,
+            "markers": self.seen,
+            "state": self.mission.state.value,
+            "view": self.mission.view,
+            "guard": self.guard.reason,
+            "speed": round(self.drive.speed, 3),
+            "turn": round(self.drive.turn, 3),
+            "front": None if report is None or report.front != report.front else report.front,
+            "rear": None if report is None or report.rear != report.rear else report.rear,
+            "problem": self.person_problem,
+            "outcome": self.mission.outcome,
+        }
+
     def status(self):
         place, _ = self.localizer.uncertainty
         if self.person_problem:
@@ -227,6 +253,36 @@ class Robot:
         if not (self.localizer.good or self.localizer.lost):
             where += ", looking for a marker" if self.searched < 2 * math.pi else ", no marker found"
         return f"{self.mission.state.value}; {self.guard.reason}; {where}; {self.mission.outcome}"
+
+
+def summarize(path, setup):
+    """A few lines about a saved run."""
+    rows = []
+    for n, line in enumerate(Path(path).read_text().splitlines(), 1):
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            raise ValueError(f"line {n} of the log is damaged") from None
+    if not rows:
+        raise ValueError("the log is empty")
+    path_m = sum(math.dist((a["x"], a["y"]), (b["x"], b["y"])) for a, b in pairwise(rows))
+    nearest = min(math.dist((r["x"], r["y"]), setup.person) - 2 * r["within"] for r in rows)
+    stops = {}
+    for r in rows:
+        if r["guard"] not in ("ok", "starting"):
+            stops[r["guard"]] = stops.get(r["guard"], 0) + 1
+    lines = [
+        f"{rows[-1]['t'] - rows[0]['t']:.0f} s, about {path_m:.1f} m driven, by its own estimate.",
+        f"Nearest to the person, allowing for its uncertainty: {nearest:.2f} m.",
+        f"Ended {rows[-1]['state']}: {rows[-1]['outcome']}.",
+    ]
+    if any(r["lost"] for r in rows):
+        lines.append(f"Lost its position at {next(r['t'] for r in rows if r['lost']):.0f} s.")
+    if any(r["problem"] for r in rows):
+        lines.append(f"Stopped because {next(r['problem'] for r in rows if r['problem'])}.")
+    for reason, count in sorted(stops.items(), key=lambda kv: -kv[1]):
+        lines.append(f"Held by the guard, {reason}: {count / 2:.1f} s")
+    return "\n".join(lines)
 
 
 class SerialPort:
@@ -260,11 +316,21 @@ def main(argv=None):
     parser.add_argument("--setup", type=Path, required=True)
     parser.add_argument("--port", help="the motor board's serial port")
     parser.add_argument("--check", action="store_true", help="only check the setup file")
+    parser.add_argument(
+        "--log", type=Path, help="save positions and decisions, twice a second, without pictures"
+    )
+    parser.add_argument("--replay", type=Path, metavar="LOG", help="summarize a saved log and stop")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
     args = parser.parse_args(argv)
     from .remote import Listener, load_key
 
+    if args.replay:
+        try:
+            print(summarize(args.replay, Setup.load(args.setup)))
+        except (OSError, ValueError) as error:
+            parser.exit(1, f"{error}\n")
+        return
     if args.check:
         try:
             errors, warnings = check_setup(Setup.load(args.setup))
@@ -279,7 +345,14 @@ def main(argv=None):
             parser.exit(1)
         return
     if not args.port:
-        parser.error("--port is needed, except with --check")
+        parser.error("--port is needed, except with --check or --replay")
+    log = None
+    if args.log:
+        try:
+            args.log.parent.mkdir(parents=True, exist_ok=True)
+            log = args.log.open("x")
+        except OSError as error:
+            parser.exit(1, f"{error}\n")
     listener = None
     try:
         setup = Setup.load(args.setup)
@@ -300,7 +373,7 @@ def main(argv=None):
     monitor, check = Monitor(ChestTracker(finder)), ResponseCheck(Speaker())
     robot = Robot(setup, port)
     robot.guard.emergency_stop()
-    title, start, was = "Ostinato rover", time.monotonic(), None
+    title, start, was, logged = "Ostinato rover", time.monotonic(), None, -1.0
     if listener:
         print(
             f"Stopped. Waiting for the remote on port {listener.port}. Keep the hardware emergency stop in hand."
@@ -336,6 +409,9 @@ def main(argv=None):
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next
                 check.cancel()
+            if log and t - logged >= 0.5:
+                log.write(json.dumps(robot.record(t)) + "\n")
+                logged = t
             line = robot.status()
             if line != was:
                 print(f"{t:7.1f} s  {line}", flush=True)
@@ -360,6 +436,8 @@ def main(argv=None):
         port.close()
         if listener:
             listener.close()
+        if log:
+            log.close()
         cv2.destroyAllWindows()
     print(f"Outcome: {robot.mission.outcome}")
 
