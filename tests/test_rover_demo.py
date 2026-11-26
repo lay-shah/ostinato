@@ -26,7 +26,11 @@ def test_simulated_run_moves_to_a_second_view_and_measures():
 def test_screen_shows_every_state(monkeypatch):
     drawn = []
     real = rover_demo.ImageDraw.ImageDraw.text
-    monkeypatch.setattr(rover_demo.ImageDraw.ImageDraw, "text", lambda self, xy, text, **k: (drawn.append(text), real(self, xy, text, **k)))
+    monkeypatch.setattr(
+        rover_demo.ImageDraw.ImageDraw,
+        "text",
+        lambda self, xy, text, **k: (drawn.append(text), real(self, xy, text, **k)),
+    )
     demo = RoverDemo()
     for i in range(330):
         demo.step()
@@ -61,3 +65,15 @@ def test_drives_on_its_own_estimate_and_corrects_it_with_markers():
     # The wheels stop when the robot program goes quiet.
     demo.wheels.run(demo.t + 1.0, 0.05)
     assert demo.wheels.speeds == (0, 0)
+
+
+def test_asks_at_the_blocked_view_then_moves_on():
+    demo, asked = RoverDemo(), []
+    while not demo.done and demo.t < 150:
+        demo.step()
+        if demo.asking:
+            asked.append((demo.mission.view, demo.drive))
+            assert "raise a hand" in demo.status()[0]
+    assert asked and {view for view, _ in asked} == {0}
+    assert all(drive == STOP for _, drive in asked)
+    assert demo.measured and demo.mission.view == 1
