@@ -59,3 +59,5 @@ The simulation comparison reports mission time to a usable result averaged over 
 ## Guided trials
 
 Double-click `launch/Breathing Trials.command` on a Mac, or run `python -m ostinato.trial`. It names the files, alternates the view order, says when to start and stop counting, hides estimates until the session ends, and then shows the accuracy. The steps above do the same by hand.
+
+The accuracy report also gives each camera position's own numbers, and compares the two views of each trial. Both views watched the same breaths, so the comparison is fair. It counts how often each view was closer to the count, how often they were within 0.5 breaths/min of each other, and how often only one of them gave a rate. With few trials, these counts are a hint about which position to try more, not an answer.

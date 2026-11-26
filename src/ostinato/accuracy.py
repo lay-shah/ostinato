@@ -13,6 +13,7 @@ from .report import CSS
 from .viewpoints import load_pair
 
 FEW = 20  # reported windows below which numbers are called preliminary
+TIE = 0.5  # breaths/min; errors closer than this are a tie between two views
 
 
 def wilson(k, n, z=1.96):
@@ -47,6 +48,8 @@ def analyze(pairs, tolerance_bpm=2.0):
         "limits_of_agreement": None,
         "declines": {},
         "points": [[w.reference_bpm, w.bpm, w.view] for w in done],
+        "by_view": by_view(pairs, tolerance_bpm),
+        "head_to_head": head_to_head(pairs),
     }
     for w in windows:
         if w.bpm is None:
@@ -64,6 +67,85 @@ def analyze(pairs, tolerance_bpm=2.0):
             spread = 1.96 * float(diff.std(ddof=1))
             out["limits_of_agreement"] = [out["bias"] - spread, out["bias"] + spread]
     return out
+
+
+def by_view(pairs, tolerance_bpm=2.0):
+    """Each camera position's own numbers."""
+    out = {}
+    for view in sorted({w.view for pair in pairs for w in pair}):
+        windows = [w for pair in pairs for w in pair if w.view == view]
+        done = [w for w in windows if w.bpm is not None]
+        diff = np.array([w.bpm - w.reference_bpm for w in done])
+        out[view] = {
+            "windows": len(windows),
+            "reported": len(done),
+            "coverage": len(done) / len(windows),
+            "coverage_95ci": wilson(len(done), len(windows)),
+            "mean_absolute_error": float(np.abs(diff).mean()) if done else None,
+            "within_tolerance": float((np.abs(diff) <= tolerance_bpm).mean()) if done else None,
+            "bias": float(diff.mean()) if done else None,
+        }
+    return out
+
+
+def head_to_head(pairs):
+    """The two views of each trial watched the same breaths, so compare them trial by trial."""
+    out = {}
+    for pair in pairs:
+        a, b = sorted(pair, key=lambda w: w.view)
+        key = f"{a.view} vs {b.view}"
+        row = out.setdefault(
+            key, {"trials": 0, "both": 0, "closer": {a.view: 0, b.view: 0}, "tied": 0,
+                  "only": {a.view: 0, b.view: 0}, "neither": 0},
+        )  # fmt: skip
+        row["trials"] += 1
+        if a.bpm is None and b.bpm is None:
+            row["neither"] += 1
+        elif a.bpm is None or b.bpm is None:
+            row["only"][(b if a.bpm is None else a).view] += 1
+        else:
+            row["both"] += 1
+            ea, eb = abs(a.bpm - a.reference_bpm), abs(b.bpm - b.reference_bpm)
+            if abs(ea - eb) < TIE:
+                row["tied"] += 1
+            else:
+                row["closer"][a.view if ea < eb else b.view] += 1
+    return out
+
+
+def compare_lines(result):
+    """Plain sentences on which camera position did better."""
+    return view_lines(result) + duel_lines(result)
+
+
+def view_lines(result):
+    lines = []
+    for view, v in result["by_view"].items():
+        error = (
+            ""
+            if v["mean_absolute_error"] is None
+            else f", average error {v['mean_absolute_error']:.1f} breaths/min, "
+            f"{v['within_tolerance']:.0%} within {result['tolerance_bpm']:g}"
+        )
+        lines.append(f"{view}: a rate in {v['reported']} of {v['windows']}{error}")
+    return lines
+
+
+def duel_lines(result):
+    lines = []
+    for key, h in result["head_to_head"].items():
+        a, b = h["closer"]
+        parts = [f"{key}, {h['trials']} trials:"]
+        if h["both"]:
+            parts.append(
+                f"both gave a rate in {h['both']}; {a} was closer in {h['closer'][a]}, "
+                f"{b} in {h['closer'][b]}, and in {h['tied']} they were within {TIE:g} breaths/min of each other."
+            )
+        parts += [f"Only {view} gave a rate in {n}." for view, n in h["only"].items() if n]
+        if h["neither"]:
+            parts.append(f"Neither did in {h['neither']}.")
+        lines.append(" ".join(parts))
+    return lines
 
 
 def _plot(result):
@@ -123,6 +205,13 @@ def render(result):
     ]  # fmt: skip
     table = "".join(f"<tr><td>{escape(a)}</td><td>{escape(b)}</td></tr>" for a, b in rows)
     why = "".join(f"<tr><td>{n}</td><td>{escape(r)}</td></tr>" for r, n in sorted(result["declines"].items()))
+    views = "".join(
+        f"<tr><td>{escape(view)}</td><td>{v['reported']} of {v['windows']}</td><td>{number(v['mean_absolute_error'], '')}</td>"
+        f"<td>{'not available' if v['within_tolerance'] is None else format(v['within_tolerance'], '.0%')}</td>"
+        f"<td>{number(v['bias'], '', '+')}</td></tr>"
+        for view, v in result["by_view"].items()
+    )
+    duels = "".join(f"<p>{escape(line)}</p>" for line in duel_lines(result))
     few = (
         f'<p class="warn"><b>Preliminary: fewer than {FEW} rates. Do not generalize from this.</b></p>'
         if result["reported"] < FEW
@@ -136,6 +225,9 @@ def render(result):
         f"<p>{result['trials']} paired trials. Errors cover only windows where the app gave a rate, so read them "
         "beside the share that got one.</p>"
         f"<div class='box'><table>{table}</table></div><h2>App compared with count</h2><div class='box'>{_plot(result)}</div>"
+        "<h2>By camera position</h2><div class='box'><table><tr><th>View</th><th>With a rate</th>"
+        f"<th>Mean absolute error</th><th>Within {result['tolerance_bpm']:g}</th><th>Bias</th></tr>{views}</table>"
+        f"{duels}</div>"
         f"<h2>Windows without a rate</h2><div class='box'><table>{why or '<tr><td>None</td><td></td></tr>'}</table></div>"
         "<h2>Read this first</h2><p>Windows from the same person are related, so the intervals are too narrow when a few "
         "people give many windows. A hand count can be off by one breath, about 2 breaths/min over 30 seconds. "

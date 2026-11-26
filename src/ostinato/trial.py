@@ -100,6 +100,8 @@ def summary(result):
             f"Average error {result['mean_absolute_error']:.1f} breaths/min, largest {result['largest_error']:.1f}, "
             f"{result['within_tolerance']:.0%} within {result['tolerance_bpm']:g}."
         )
+    if len(result["by_view"]) > 1:
+        lines += ["", "By camera position:", *(f"  {line}" for line in accuracy.compare_lines(result))]
     for reason, n in sorted(result["declines"].items()):
         lines.append(f"No rate in {n}: {reason}")
     if result["reported"] < accuracy.FEW:
