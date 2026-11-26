@@ -9,7 +9,7 @@ A new rover that drives to one person, **stops**, and measures from a camera on 
 | 1. Camera position | Counted-breath trials on people lying down, at several heights and distances, show where a rate is given and how far off it is | $0 |
 | 2. Computer | `python -m ostinato.speed --image photo.jpg` gives 10 frames/s or more on it | borrow first |
 | 3. Mast | `python -m ostinato.shake` shows the camera is steady within 2 s of every push | $30-50 |
-| 4. Remote-controlled rover | Drives, stops 1 m away, measures, moves to a second view | $200-400 |
+| 4. Remote-controlled rover | `python -m ostinato.bench` passes with the wheels off the ground; then it drives, stops 1 m away, measures, and moves to a second view | $200-400 |
 | 5. Autonomy | Goes between marked viewpoints and stops for obstacles | $0-50 |
 
 Do not buy the rover before step 1 works.

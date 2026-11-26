@@ -10,8 +10,6 @@ import binascii
 import math
 from dataclasses import dataclass
 
-from .rover import STOP
-
 MAX_WHEEL = 450  # mm/s, as on the board
 MAX_LINE = 80
 SILENT = -1  # a distance sensor that did not answer
@@ -72,11 +70,15 @@ class Board:
 
     def send(self, drive):
         """Call every control step, after `Guard`, even when stopped."""
+        self.send_wheels(*wheels(drive, self.track))
+
+    def send_wheels(self, left, right):
+        """Each wheel's speed in mm/s. Only for bench tests: driving goes through `send`."""
         self._seq = (self._seq + 1) % 256
         # A halted board waits for a stop before it moves again.
         if self._report is None or not self._report.armed:
-            drive = STOP
-        left, right = wheels(drive, self.track)
+            left = right = 0
+        left, right = (max(-MAX_WHEEL, min(MAX_WHEEL, int(v))) for v in (left, right))
         self.port.write(seal(f"D,{self._seq},{left},{right}"))
 
     def receive(self, t, guard):
