@@ -191,7 +191,10 @@ def test_app_waits_for_camera_permission(monkeypatch, capsys):
 
 def test_hand_raise_after_moving_needs_a_new_prompt(monkeypatch):
     log, _ = run_app(
-        monkeypatch, [("m", 18)], lambda t: Body((300, 200), 200, 0.8 if 19 < t < 21 else -1, None), seconds=22
+        monkeypatch,
+        [("m", 18)],
+        lambda t: Body((300, 200), 200, 0.8 if 19 < t < 21 else -1, None),
+        seconds=22,
     )
     assert not log[-1][1].final
 

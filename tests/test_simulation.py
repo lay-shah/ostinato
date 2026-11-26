@@ -55,8 +55,12 @@ def test_every_run_is_valid(seed):
         assert not any(scene.walls[c] for c in out["track"])
         # Never drive over, or right next to, a casualty.
         for p in scene.people:
-            assert all(max(abs(c[0] - p.known.cell[0]), abs(c[1] - p.known.cell[1])) > 1 for c in out["track"])
-        assert all(max(abs(a[0] - b[0]), abs(a[1] - b[1])) == 1 for a, b in zip(out["track"], out["track"][1:]))
+            assert all(
+                max(abs(c[0] - p.known.cell[0]), abs(c[1] - p.known.cell[1])) > 1 for c in out["track"]
+            )
+        assert all(
+            max(abs(a[0] - b[0]), abs(a[1] - b[1])) == 1 for a, b in zip(out["track"], out["track"][1:])
+        )
         previous = 0
         for r in out["results"]:
             person = scene.people[r["person"]]
@@ -87,7 +91,9 @@ def test_planners_cannot_see_hidden_truth():
     assert set(sim.Known.__dataclass_fields__) == {"id", "cell", "facing", "cue"}
     # Changing who is truly urgent must not change where the robot goes.
     scene = sim.make_scene(1001)
-    flipped = sim.Scene(scene.walls, scene.start, tuple(replace(p, urgent=not p.urgent) for p in scene.people))
+    flipped = sim.Scene(
+        scene.walls, scene.start, tuple(replace(p, urgent=not p.urgent) for p in scene.people)
+    )
     assert sim.run(scene, "ranked", "predicted") == sim.run(flipped, "ranked", "predicted")
 
 

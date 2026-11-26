@@ -30,7 +30,9 @@ def test_labeled_offline_and_safe_wording():
 
 def test_hidden_truth_does_not_reach_the_page():
     scene, out, html = page(1001)
-    people = tuple(replace(p, urgent=not p.urgent, facing=0.0, bpm=99.0, blocked=frozenset()) for p in scene.people)
+    people = tuple(
+        replace(p, urgent=not p.urgent, facing=0.0, bpm=99.0, blocked=frozenset()) for p in scene.people
+    )
     assert render(sim.Scene(scene.walls, scene.start, people), out) == html
 
 
