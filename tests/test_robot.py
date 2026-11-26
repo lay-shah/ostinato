@@ -111,8 +111,10 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
     """Returns the robot, the nearest it came to the person, and how often the wheels
     turned when they should not have."""
     hw = Hardware(program, setup, seed, trouble.pop("loss", 0.0))
-    robot, dt, nearest, wrong = Robot(setup, hw), 0.05, math.inf, 0
+    robot, dt, nearest, wrong = Robot(setup, hw, ask=trouble.get("ask", False)), 0.05, math.inf, 0
     cut, estop, restart = trouble.get("cut"), trouble.get("estop"), trouble.get("restart")
+    asks = robot.asks = []  # times the robot asked for a raised hand
+    hand = trouble.get("hand")  # seconds after asking that a hand goes up, or None
     really = trouble.get("really", setup.person)
     try:
         for i in range(int(seconds / dt)):
@@ -133,7 +135,22 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
             late = [x for x in (cut, estop) if x is not None and t > x + 0.6]
             wrong += bool(turning and late)
             chest = hw.chest(really, setup.lens_height) if measuring and setup.lens_height else None
-            robot.step(t, sightings=hw.sightings() if i % 10 == 0 else (), reading=reading, chest=chest)
+            # Asking lasts 10 s, as in the app.
+            asking = bool(asks) and t - asks[-1] < 10
+            raised = asking and hand is not None and t - asks[-1] >= hand
+            robot.step(
+                t,
+                sightings=hw.sightings() if i % 10 == 0 else (),
+                reading=reading,
+                responded=raised,
+                asking=asking,
+                chest=chest,
+            )
+            if robot.wants_ask:
+                asks.append(t)
+            robot.moved_while_asking = getattr(robot, "moved_while_asking", False) or (
+                asking and robot.drive != STOP
+            )
             nearest = min(nearest, math.dist((hw.pose.x, hw.pose.y), setup.person))
             if robot.mission.state is until or robot.mission.state is State.DONE:
                 break
@@ -482,3 +499,27 @@ def test_replay_summary(tmp_path):
     path.write_text("{broken")
     with pytest.raises(ValueError):
         summarize(path, setup_with(tmp_path))
+
+
+def test_asks_for_a_hand_before_leaving_a_view(board_program, setup):
+    robot, nearest, _ = drive(
+        board_program, setup, 2, until=State.DONE, seconds=200, breathing=False, ask=True
+    )
+    # Once at each of the two views, and it never moved while asking.
+    assert len(robot.asks) == 2 and not robot.moved_while_asking
+    assert robot.mission.view == 1 and "a person must check" in robot.mission.outcome
+    assert nearest > KEEP_OUT
+
+
+def test_a_raised_hand_ends_it_where_it_is(board_program, setup):
+    robot, _, _ = drive(
+        board_program, setup, 2, until=State.DONE, seconds=200, breathing=False, ask=True, hand=3
+    )
+    assert len(robot.asks) == 1 and robot.mission.view == 0
+    assert robot.mission.state is State.DONE and robot.mission.outcome == "hand raised when asked; breathing was not measured"
+    assert robot.drive == STOP
+
+
+def test_without_asking_it_never_asks(board_program, setup):
+    robot, _, _ = drive(board_program, setup, 2, until=State.DONE, seconds=200, breathing=False)
+    assert robot.asks == [] and robot.mission.view == 1

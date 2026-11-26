@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .decision import Action, Assessor
+from .decision import Action, Assessor, Status
 
 MAX_SPEED = 0.3  # m/s
 MAX_TURN = 1.0  # rad/s
@@ -164,6 +164,7 @@ class Mission:
     state: State = State.DRIVING
     assessor: Assessor | None = None
     log: list = field(default_factory=list)
+    ask_first: bool = False  # ask the person to raise a hand before leaving each view
 
     def __post_init__(self):
         if not self.bearings:
@@ -182,6 +183,8 @@ class Mission:
                 else "in progress"
             )
         d = self.assessor.decision
+        if d.status is Status.RESPONDED:
+            return "hand raised when asked; breathing was not measured"
         if d.action is Action.REPORT:
             return f"{d.bpm:.1f} breaths/min" if d.bpm is not None else d.reason
         return (
@@ -230,7 +233,7 @@ class Mission:
                 self._since = t
             elif t - self._since >= SETTLE:
                 if self.assessor is None:
-                    self.assessor = Assessor(t, len(self.bearings) - 1 - self.view)
+                    self.assessor = Assessor(t, len(self.bearings) - 1 - self.view, ask_first=self.ask_first)
                 else:
                     self.assessor.arrived(t)
                 self._go(t, State.MEASURING)

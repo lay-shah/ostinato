@@ -74,7 +74,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `python -m ostinato.bench --port …` | First power-on checks, wheels off the ground; `--measure` finds counts per meter |
 | `python -m ostinato.robot --setup room.json --check` | Checks a setup file: start too near the person, a viewpoint with no marker in view, a marker on the path |
 | `python -m ostinato.remote --make-key key.txt` | Makes the key shared by the remote and the rover |
-| `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped |
+| `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
 | `python -m ostinato.remote --robot <address> --key key.txt` | The operator's window: G lets it move, Space stops it |
 | `… --log data/run.jsonl`, then `--replay data/run.jsonl` | Saves and summarizes a run, without pictures |
 | `python -m ostinato.rover_demo` | The whole thing on a drawn person and room; also `launch/Rover Simulation.command` |
