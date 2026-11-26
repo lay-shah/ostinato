@@ -26,12 +26,13 @@ class PoseFinder:
         import mediapipe as mp
 
         self.body = None  # arm positions from the latest frame
+        self.points = None  # shoulders and hips in the latest frame, in pixels
 
         self._pose = mp.solutions.pose.Pose(model_complexity=1)
 
     def __call__(self, bgr):
         """Return pixel array [l_shoulder, r_shoulder, l_hip, r_hip] or None."""
-        self.body = None
+        self.body = self.points = None
         result = self._pose.process(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
         if not result.pose_landmarks:
             return None
@@ -40,7 +41,8 @@ class PoseFinder:
         self.body = body_from_landmarks([(m.x * w, m.y * h) for m in marks], [m.visibility for m in marks], (w, h))
         if min(marks[11].visibility, marks[12].visibility) < MIN_VISIBILITY:
             return None
-        return np.array([[marks[i].x * w, marks[i].y * h] for i in (11, 12, 23, 24)])
+        self.points = np.array([[marks[i].x * w, marks[i].y * h] for i in (11, 12, 23, 24)])
+        return self.points
 
     def close(self):
         self._pose.close()

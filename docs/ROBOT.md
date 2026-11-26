@@ -74,6 +74,8 @@ In simulation it reached its viewpoint in 99 of 100 drives and never came within
 
 `python -m ostinato.robot --setup room.json --port /dev/ttyACM0` runs the whole thing: camera, markers, wheels, guard, and the breathing check at each viewpoint. It needs `pip install -e ".[robot]"`. The setup file holds measurements a person takes; its format is at the top of `src/ostinato/robot.py`. It starts stopped. G starts it, Space stops it, Q quits.
 
+With the camera's height in the setup file, the camera checks at each viewpoint that the person is where the file says, within 0.25 m. If not, or if it never saw them there, the rover stops for a person to check: someone who moved may be beside it, out of the picture. In simulation it caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
+
 When it is unsure where it is, it turns on the spot, at most once around, to find a marker. Turning in place is the only movement allowed without knowing how far away the person is.
 
 Against the compiled board code with simulated wheels and markers, it reached its first viewpoint in 300 of 300 drives, including with 30% of messages lost or damaged, and was never nearer than 1.2 m. With no marker in sight it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again. It has not run on hardware.

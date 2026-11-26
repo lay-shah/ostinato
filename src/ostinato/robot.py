@@ -9,27 +9,35 @@ The setup file, in meters and degrees, measured by a person:
     {"track": 0.27, "ticks_per_meter": 2000,
      "start": [2.4, 0.3, 140], "person": [0, 0], "views": [30, 150],
      "markers": {"1": [0, 3], "2": [3, 0]},
-     "camera": {"calibration": "camera.json", "pitch": 20}}
+     "camera": {"calibration": "camera.json", "pitch": 20, "height": 0.8}}
 
 "calibration" is from `python -m ostinato.calibrate`. Without it, give "fov", the
 lens's angle across, and distances to markers are rougher.
 
 "start" is where the rover is placed and which way it faces. "views" are directions
-around the person, from the person, to measure from in order.
+around the person, from the person, to measure from in order. "height" is the lens's
+height above the floor. With it, the camera checks that the person is where the file
+says, and the rover stops if not.
 """
 
 import argparse
 import json
 import math
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
+
 from .calibrate import Calibration
-from .localize import Camera, Localizer, find_markers
+from .localize import Camera, Localizer, find_markers, ground, place
 from .motors import Board
 from .rover import STOP, Drive, Guard, Mission, Pose, State
 
+CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
+MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
+LOOKS = 15  # sightings of the person before judging
 SEARCH_TURN = 0.4  # rad/s, turning in place to find a marker when unsure where it is
 
 
@@ -42,6 +50,7 @@ class Setup:
     views: list[float]  # radians
     markers: dict[int, tuple[float, float]]
     camera: Camera = field(default_factory=Camera)
+    lens_height: float | None = None  # m above the floor
 
     @classmethod
     def load(cls, path):
@@ -49,10 +58,11 @@ class Setup:
             raw = json.loads(Path(path).read_text())
             x, y, heading = (float(v) for v in raw["start"])
             camera = dict(raw.get("camera", {}))
-            if not camera.keys() <= {"fov", "pitch", "pan", "calibration"}:
-                raise ValueError("camera takes calibration, fov, pitch, and pan")
+            if not camera.keys() <= {"fov", "pitch", "pan", "height", "calibration"}:
+                raise ValueError("camera takes calibration, fov, pitch, pan, and height")
             lens = camera.pop("calibration", None)
             camera = {k: float(v) for k, v in camera.items()}
+            lens_height = camera.pop("height", None)
             if lens is not None:
                 if "fov" in camera:
                     raise ValueError("give calibration or fov, not both")
@@ -67,6 +77,7 @@ class Setup:
                 [math.radians(float(v)) for v in raw["views"]],
                 {int(k): tuple(float(v) for v in p) for k, p in raw["markers"].items()},
                 camera,
+                lens_height,
             )
         except (OSError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
             raise ValueError(f"setup file: {error}") from None
@@ -78,6 +89,8 @@ class Setup:
             raise ValueError("setup file: check track, ticks_per_meter, and person")
         if not setup.views or not setup.markers or any(len(p) != 2 for p in setup.markers.values()):
             raise ValueError("setup file: needs views and at least one marker at [x, y]")
+        if setup.lens_height is not None and not 0.2 <= setup.lens_height <= 2:
+            raise ValueError("setup file: camera height must be 0.2 to 2 m")
         if not 0 < setup.camera.fov < 170 or abs(setup.camera.pitch) > 60:
             raise ValueError("setup file: check the camera")
         return setup
@@ -94,10 +107,14 @@ class Robot:
         self.mission = Mission(setup.person, list(setup.views))
         self.drive, self.moving = STOP, False
         self._last = None
+        self.seen_person = deque(maxlen=LOOKS)
+        self.confirmed = 0  # sightings of the person in place at this viewpoint
+        self.person_problem = None
         self.searched = 0.0  # radians turned looking for a marker since it was last sure
 
-    def step(self, t, link=True, sightings=(), reading=None, responded=False, asking=False):
-        """`link` is whether the operator is there. Returns the command sent."""
+    def step(self, t, link=True, sightings=(), reading=None, responded=False, asking=False, chest=None):
+        """`link` is whether the operator is there. `chest` is the middle of the person's
+        shoulders and hips in the picture, when seen. Returns the command sent."""
         if link:
             self.guard.link(t)
         for report in self.board.receive(t, self.guard):
@@ -113,9 +130,20 @@ class Robot:
             self.moving = (report.left, report.right) != (last.left, last.right)
         for sighting in sightings:
             self.localizer.see(sighting)
+        self._check_person(chest)
         self.localizer.tell(self.guard, t, self.setup.person)
         moving = self.moving or self.drive != STOP
+        was = self.mission.state
         want = self.mission.update(t, self.localizer.pose, moving, reading, responded, asking)
+        if was is State.MEASURING and self.mission.state is not State.MEASURING:
+            # Out of the picture, a person who moved may be right beside the rover.
+            if (
+                self.setup.lens_height is not None
+                and self.confirmed < LOOKS
+                and self.mission.state is not State.DONE
+            ):
+                self.person_problem = "the camera did not see the person where the setup file says"
+            self.confirmed = 0
         if self.localizer.good:
             self.searched = 0.0
         elif self.mission.state in (State.DRIVING, State.FACING) and not self.localizer.lost:
@@ -126,10 +154,26 @@ class Robot:
                 want = Drive(0.0, SEARCH_TURN)
             else:
                 want = STOP
+        if self.person_problem:
+            want = STOP  # the 1 m kept from them may be measured from the wrong place
         self._t = t
         self.drive = self.guard.allow(t, want)
         self.board.send(self.drive)
         return self.drive
+
+    def _check_person(self, chest):
+        if chest is None or self.setup.lens_height is None or not self.localizer.good or self.moving:
+            return
+        seen = ground(self.setup.camera, chest, self.setup.lens_height - CHEST_HEIGHT)
+        if seen is None:
+            return
+        self.seen_person.append(place(self.localizer.pose, seen))
+        if len(self.seen_person) == LOOKS:
+            x, y = np.median(np.array(self.seen_person), axis=0)
+            if math.dist((x, y), self.setup.person) > MOVED:
+                self.person_problem = self.person_problem or "the person is not where the setup file says"
+            else:
+                self.confirmed += 1
 
     def _dt(self, t):
         last = getattr(self, "_t", None)
@@ -137,6 +181,8 @@ class Robot:
 
     def status(self):
         place, _ = self.localizer.uncertainty
+        if self.person_problem:
+            return f"stopped: {self.person_problem}; a person must check"
         where = "lost: place it again" if self.localizer.lost else f"position within {100 * place:.0f} cm"
         if not (self.localizer.good or self.localizer.lost):
             where += ", looking for a marker" if self.searched < 2 * math.pi else ", no marker found"
@@ -208,7 +254,12 @@ def main(argv=None):
                 )
                 reading = monitor.update(small, t)
                 responded = check.update(t, finder.body)
-            robot.step(t, True, find_markers(gray, setup.camera), reading, bool(responded), check.active)
+            chest = None
+            if measuring and finder.points is not None:
+                chest = tuple(finder.points.mean(axis=0) * (frame.shape[1] / 640))
+            robot.step(
+                t, True, find_markers(gray, setup.camera), reading, bool(responded), check.active, chest
+            )
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next
                 check.cancel()
