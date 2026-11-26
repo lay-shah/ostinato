@@ -2,6 +2,8 @@ import json
 import math
 import random
 import subprocess
+import time
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -257,3 +259,124 @@ def test_camera_height_is_checked(tmp_path):
         path.write_text(json.dumps({**ROOM, "camera": {"fov": 70, "height": height}}))
         with pytest.raises(ValueError):
             Setup.load(path)
+
+
+class Camera:
+    """Grey pictures; calls `each` before every one."""
+
+    def __init__(self, frames, each=lambda n: None):
+        self.n, self.frames, self.each = 0, frames, each
+        self.released = False
+
+    def set(self, *args):
+        pass
+
+    def read(self):
+        self.n += 1
+        self.each(self.n)
+        return self.n <= self.frames, np.full((720, 1280, 3), 120, np.uint8)
+
+    def release(self):
+        self.released = True
+
+
+class Port:
+    """A board that is ready and whose wheels count up while asked to turn."""
+
+    made: ClassVar[list] = []
+
+    def __init__(self, name):
+        self.sent, self.times, self.ms, self.ticks, self.closed = [], [], 0, 0, False
+        Port.made.append(self)
+
+    def write(self, data):
+        self.sent.append(data)
+        self.times.append(time.monotonic())
+
+    def read(self):
+        self.ms += 50
+        moving = self.sent and not self.sent[-1].split(b"*")[0].endswith(b",0,0")
+        self.ticks += 20 if moving else 0
+        return seal(f"T,{self.ms},{self.ticks},{self.ticks},3000,3000,1")
+
+    def close(self):
+        self.closed = True
+
+
+class Finder:
+    body = points = None
+
+    def __call__(self, frame):
+        return None
+
+    def close(self):
+        pass
+
+
+def moving(data):
+    return not data.split(b"*")[0].endswith(b",0,0")
+
+
+@pytest.fixture
+def program(monkeypatch, tmp_path):
+    import cv2
+
+    from ostinato import app, chest, robot
+
+    (tmp_path / "room.json").write_text(json.dumps(ROOM))
+    monkeypatch.setattr(robot, "SerialPort", Port)
+    monkeypatch.setattr(chest, "PoseFinder", Finder)
+    for name in ("imshow", "destroyAllWindows"):
+        monkeypatch.setattr(cv2, name, lambda *a: None)
+    Port.made.clear()
+
+    def run(camera, keys=(), extra=()):
+        presses = iter(keys)
+        monkeypatch.setattr(app, "open_camera", lambda index: camera)
+        monkeypatch.setattr(cv2, "waitKey", lambda ms: next(presses, 255))
+        robot.main(["--setup", str(tmp_path / "room.json"), "--port", "x", *extra])
+        return Port.made[-1]
+
+    return run
+
+
+def test_program_starts_stopped_and_cleans_up(program, capsys):
+    camera = Camera(60)
+    port = program(camera)
+    assert not any(moving(d) for d in port.sent)
+    assert port.closed and camera.released
+    assert port.sent[-3:] == [d for d in port.sent[-3:] if not moving(d)]
+    assert "only for testing" in capsys.readouterr().out
+
+
+def test_program_goes_on_g(program):
+    port = program(Camera(60, each=lambda n: time.sleep(0.01)), keys=[ord("g")])
+    assert any(moving(d) for d in port.sent) and not moving(port.sent[-1])
+
+
+def test_program_follows_the_remote(program, tmp_path):
+    from ostinato.remote import Remote, load_key, make_key
+
+    key = make_key(tmp_path / "key.txt")
+    remote = Remote(load_key(key), "127.0.0.1")
+    sent_at, last = {}, []
+
+    def operator(n):
+        # Go from picture 10 to 40, then silence, as if the laptop slept.
+        remote.go = 10 <= n
+        if n < 40:
+            remote.step(time.monotonic())
+            last.append(time.monotonic())
+            sent_at[n] = len(Port.made[-1].sent) if Port.made else 0
+        time.sleep(0.02)
+
+    try:
+        port = program(Camera(80, each=operator), keys=[ord("g")] * 5, extra=["--key", str(key)])
+    finally:
+        remote.close()
+    # Its own G is ignored with a remote; nothing moves before the remote says go.
+    assert not any(moving(d) for d in port.sent[: sent_at[8]])
+    assert any(moving(d) for d in port.sent[sent_at[12] : sent_at[39]])
+    # Within 0.5 s of the last heartbeat, it stops and stays stopped.
+    late = [d for d, at in zip(port.sent, port.times) if at > last[-1] + 0.55]
+    assert late and not any(moving(d) for d in late)
