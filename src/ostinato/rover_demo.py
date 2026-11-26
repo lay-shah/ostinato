@@ -66,28 +66,14 @@ class RoverDemo:
         """Return (headline, detail, color)."""
         view = f"View {self.mission.view + 1} of {len(BEARINGS)}"
         if self.done:
-            return (
-                f"{self.mission.outcome.capitalize()} (simulated)",
-                "The rover stays where it stopped.",
-                GREEN if self.measured else AMBER,
-            )
+            return f"{self.mission.outcome.capitalize()} (simulated)", "The rover stays where it stopped.", GREEN if self.measured else AMBER
         if self.mission.state is State.MEASURING:
             r = self.reading
-            now = (
-                f"{r.bpm:.0f} breaths/min"
-                if r and r.bpm is not None
-                else f"unable to assess: {r.reason}"
-                if r
-                else "starting"
-            )
+            now = f"{r.bpm:.0f} breaths/min" if r and r.bpm is not None else f"unable to assess: {r.reason}" if r else "starting"
             return f"{view}: stopped and measuring", now.capitalize(), BLUE
         if self.mission.state is State.DRIVING:
             why = "Moving to a better view" if self.mission.view else "Driving to the first view"
-            return (
-                f"{view}: driving at {abs(self.drive.speed):.1f} m/s",
-                f"{why}. Not measuring while moving.",
-                INK,
-            )
+            return f"{view}: driving at {abs(self.drive.speed):.1f} m/s", f"{why}. Not measuring while moving.", INK
         return f"{view}: {self.mission.state.value}", "Waiting until it is still before measuring.", INK
 
     @property
