@@ -7,12 +7,17 @@ safety; everything here is on top of it.
 The setup file, in meters and degrees, measured by a person:
 
     {"track": 0.27, "ticks_per_meter": 2000,
-     "start": [2.4, 0.3, 140], "person": [0, 0], "views": [30, 150],
+     "start": [2.4, 0.3, 140], "person": [0, 0, 90], "views": [30, 150],
      "markers": {"1": [0, 3, 270], "2": [3, 0, 180]},
      "camera": {"calibration": "camera.json", "pitch": 20, "height": 0.8}}
 
 "calibration" is from `python -m ostinato.calibrate`. Without it, give "fov", the
 lens's angle across, and distances to markers are rougher.
+
+"person" is [x, y, head]: the middle of the chest, and the direction from there to the
+head. The rover then keeps its distance from the whole body, about 0.75 m toward the head
+and 1.1 m toward the feet. Given as [x, y], it keeps away from the chest alone, which is
+right only for someone sitting or standing.
 
 Each marker is [x, y, facing]: where it is, and the direction its printed side faces.
 The facing may be left out, as [x, y], but then the check cannot tell whether a marker is
@@ -22,7 +27,7 @@ turned too far from a view to be read.
 asks for a person. About 3.5 V a cell for a lithium battery, so 10.5 for three cells.
 
 "start" is where the rover is placed and which way it faces. "views" are directions
-around the person, from the person, to measure from in order. Check a file with
+around the person, from the chest, to measure from in order. Beside the chest is best. Check a file with
 `python -m ostinato.robot --setup room.json --check` before driving. "height" is the lens's
 height above the floor. With it, the camera checks that the person is where the file
 says, and the rover stops if not.
@@ -42,7 +47,7 @@ import numpy as np
 from .calibrate import Calibration
 from .localize import MARKER, Camera, Localizer, find_markers, ground, place
 from .motors import Board
-from .rover import KEEP_OUT, RING, STOP, Drive, Guard, Mission, Pose, State, wrap
+from .rover import KEEP_OUT, RING, STOP, Body, Drive, Guard, Mission, Pose, State, wrap
 from .shake import Steadiness
 
 CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
@@ -66,6 +71,11 @@ class Setup:
     lens_height: float | None = None  # m above the floor
     facings: dict[int, float] = field(default_factory=dict)  # radians, where given
     battery_low: float | None = None  # V; below this the rover holds its wheels
+    head: float | None = None  # radians from the chest to the head, for someone lying down
+
+    @property
+    def body(self):
+        return Body(self.person, self.head)
 
     @classmethod
     def load(cls, path):
@@ -88,18 +98,22 @@ class Setup:
                 float(raw["track"]),
                 float(raw["ticks_per_meter"]),
                 Pose(x, y, math.radians(heading)),
-                tuple(float(v) for v in raw["person"]),
+                tuple(float(v) for v in raw["person"][:2]),
                 [math.radians(float(v)) for v in raw["views"]],
                 {int(k): tuple(float(v) for v in p[:2]) for k, p in raw["markers"].items()},
                 camera,
                 lens_height,
                 {int(k): math.radians(float(p[2])) for k, p in raw["markers"].items() if len(p) == 3},
                 None if raw.get("battery_low") is None else float(raw["battery_low"]),
+                math.radians(float(raw["person"][2])) if len(raw["person"]) == 3 else None,
             )
+            if len(raw["person"]) not in (2, 3):
+                raise ValueError("setup file: person is [x, y] or [x, y, head]")
             sizes = [len(p) for p in raw["markers"].values()]
         except (OSError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
             raise ValueError(f"setup file: {error}") from None
         numbers = [setup.track, setup.ticks_per_meter, *setup.person, *setup.views]
+        numbers += [] if setup.head is None else [setup.head]
         numbers += [v for p in setup.markers.values() for v in p] + list(setup.facings.values())
         if not all(math.isfinite(v) for v in numbers):
             raise ValueError("setup file: every number must be finite")
@@ -128,7 +142,8 @@ def check_setup(setup):
     """Problems with a setup file, before driving. Returns (errors, warnings)."""
     errors, warnings = [], []
     px, py = setup.person
-    gap = math.dist((setup.start.x, setup.start.y), setup.person)
+    body = setup.body
+    gap = body.distance(setup.start.x, setup.start.y)
     if gap < RING:
         errors.append(f"the start is {gap:.2f} m from the person; it must be at least {RING} m away")
     half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
@@ -145,7 +160,7 @@ def check_setup(setup):
         return min(sees, TURNED_RANGE) if turn > TURNED else sees
 
     for i, bearing in enumerate(setup.views, 1):
-        x, y = px + RING * math.cos(bearing), py + RING * math.sin(bearing)
+        x, y = body.around(bearing, RING)
         facing = math.atan2(py - y, px - x)  # the camera's direction there
         seen = [
             n
@@ -159,6 +174,17 @@ def check_setup(setup):
             )
         else:
             errors.append(f"view {i} sees no marker: put one beyond the person, as seen from there")
+    if setup.head is None:
+        warnings.append(
+            "person has no head direction: for someone lying down, give [x, y, head] so the rover "
+            "keeps 1 m from the whole body, not only the chest"
+        )
+    else:
+        for i, bearing in enumerate(setup.views, 1):
+            along = abs(wrap(bearing - setup.head))
+            if min(along, math.pi - along) < math.radians(30):
+                end = "head" if along < math.pi / 2 else "feet"
+                warnings.append(f"view {i} is beyond the {end}: the chest is seen end on, and from far")
     if setup.battery_low is None:
         warnings.append("no battery_low: it will not stop for a flat battery")
     unknown = sorted(set(setup.markers) - set(setup.facings))
@@ -171,10 +197,10 @@ def check_setup(setup):
         if abs(wrap(a - b)) < math.radians(20):
             warnings.append("two views are within 20 degrees of each other and see much the same")
     for n, (mx, my) in setup.markers.items():
-        ring = abs(math.dist((mx, my), setup.person) - RING)
+        ring = abs(body.distance(mx, my) - RING)
         if ring < 0.35:
             errors.append(f"marker {n} is on the rover's path around the person; move it")
-        elif math.dist((mx, my), setup.person) < KEEP_OUT:
+        elif body.distance(mx, my) < KEEP_OUT:
             warnings.append(f"marker {n} is close to the person; check it does not touch them")
     return errors, warnings
 
@@ -188,7 +214,7 @@ class Robot:
         self.board = Board(port, setup.track)
         self.guard = guard or Guard()
         self.localizer = Localizer(setup.start, setup.markers, setup.track)
-        self.mission = Mission(setup.person, list(setup.views), ask_first=ask)
+        self.mission = Mission(setup.body, list(setup.views), ask_first=ask)
         self.drive, self.moving, self.shaking = STOP, False, False
         self._frames = deque(maxlen=31)  # times of the last pictures
         self._last = None
@@ -230,7 +256,7 @@ class Robot:
             self.moving = (report.left, report.right) != (last.left, last.right)
         self.seen = [s.marker for s in sightings if self.localizer.see(s)]
         self._check_person(chest)
-        self.localizer.tell(self.guard, t, self.setup.person)
+        self.localizer.tell(self.guard, t, self.setup.body)
         moving = self.moving or self.drive != STOP
         was = self.mission.state
         self.shaking = shaking
@@ -372,7 +398,7 @@ def summarize(path, setup):
     if not rows:
         raise ValueError("the log is empty")
     path_m = sum(math.dist((a["x"], a["y"]), (b["x"], b["y"])) for a, b in pairwise(rows))
-    nearest = min(math.dist((r["x"], r["y"]), setup.person) - 2 * r["within"] for r in rows)
+    nearest = min(setup.body.distance(r["x"], r["y"]) - 2 * r["within"] for r in rows)
     stops = {}
     for r in rows:
         if r["guard"] not in ("ok", "starting"):

@@ -17,8 +17,11 @@ MAX_ACCEL = 0.5  # m/s^2, speeding up; stopping is immediate
 MAX_TURN_ACCEL = 2.0  # rad/s^2
 QUIET = 0.5  # seconds without news of the link, a sensor, or a command before stopping
 OBSTACLE = 0.6  # m, stop driving toward anything closer
-KEEP_OUT = 1.0  # m from the person, measured to the rover's center
-RING = 1.25  # m, viewpoints and paths lie on this circle around the person
+KEEP_OUT = 1.0  # m from the person's body, measured to the rover's center
+RING = 1.25  # m from the body: viewpoints and paths lie on this line around the person
+# A person lying down, from the chest: to the top of the head, and to the feet. A tall adult.
+HEAD = 0.75  # m
+FEET = 1.1  # m
 SETTLE = 2.0  # seconds still before measuring, for the mast to stop shaking
 ARRIVED = 0.05  # m
 BLOCKED = 10.0  # seconds without moving before giving up on a path
@@ -135,16 +138,65 @@ def steer(pose, target):
     return Drive(min(MAX_SPEED, distance) * math.cos(error), 2 * error)
 
 
+@dataclass(frozen=True)
+class Body:
+    """A person: a point at the chest, or, lying down with `head` known, a line from the
+    head to the feet. Distances are to the nearest part of it."""
+
+    chest: tuple[float, float]
+    head: float | None = None  # radians, the direction from the chest to the head
+
+    @property
+    def ends(self):
+        x, y = self.chest
+        if self.head is None:
+            return (x, y), (x, y)
+        c, s = math.cos(self.head), math.sin(self.head)
+        return (x + HEAD * c, y + HEAD * s), (x - FEET * c, y - FEET * s)
+
+    def nearest(self, x, y):
+        """The nearest point of the body to (x, y)."""
+        (ax, ay), (bx, by) = self.ends
+        dx, dy = bx - ax, by - ay
+        length = dx * dx + dy * dy
+        k = 0.0 if length == 0 else max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / length))
+        return ax + k * dx, ay + k * dy
+
+    def distance(self, x, y):
+        return math.dist((x, y), self.nearest(x, y))
+
+    def around(self, bearing, clearance):
+        """The point `clearance` from the body, in direction `bearing` from the chest."""
+        c, s = math.cos(bearing), math.sin(bearing)
+        low, high = 0.0, clearance + HEAD + FEET
+        for _ in range(50):  # moving out from the chest, the distance only grows
+            mid = (low + high) / 2
+            if self.distance(self.chest[0] + mid * c, self.chest[1] + mid * s) < clearance:
+                low = mid
+            else:
+                high = mid
+        return self.chest[0] + high * c, self.chest[1] + high * s
+
+
+def as_body(person):
+    return person if isinstance(person, Body) else Body(tuple(person))
+
+
 def ring_path(pose, person, bearing):
-    """Points around the person to the viewpoint at `bearing`, never cutting across."""
-    here = math.atan2(pose.y - person[1], pose.x - person[0])
+    """Points around the person to the viewpoint at `bearing`, never cutting across.
+    `person` is a Body, or (x, y) for a point."""
+    body = as_body(person)
+    cx, cy = body.chest
+    here = math.atan2(pose.y - cy, pose.x - cx)
     sweep = wrap(bearing - here)
-    steps = max(1, math.ceil(abs(sweep) / math.radians(15)))
-    # A chord dips inside the circle, so the points sit slightly outside it.
-    radius = RING / math.cos(math.radians(7.5))
+    # Points about 0.33 m apart along the line (15 degrees for a point person), the far
+    # ends of a body being up to FEET further out.
+    reach = RING + (0.0 if body.head is None else max(HEAD, FEET))
+    steps = max(1, math.ceil(abs(sweep) * reach / (RING * math.radians(15))))
+    # A chord dips inside the line, so the points sit slightly outside it.
+    out = RING / math.cos(math.radians(7.5))
     angles = [here + sweep * i / steps for i in range(steps + 1)]
-    points = [(person[0] + radius * math.cos(a), person[1] + radius * math.sin(a)) for a in angles]
-    return [*points[:-1], (person[0] + RING * math.cos(bearing), person[1] + RING * math.sin(bearing))]
+    return [*(body.around(a, out) for a in angles[:-1]), body.around(bearing, RING)]
 
 
 class State(Enum):
@@ -159,8 +211,8 @@ class State(Enum):
 class Mission:
     """Visit viewpoints around one person. Measures only when still."""
 
-    person: tuple[float, float]
-    bearings: list[float]  # radians, in the order to try them
+    person: tuple[float, float] | Body  # a Body for someone lying down whose head is known
+    bearings: list[float]  # radians, in the order to try them, seen from the chest
     state: State = State.DRIVING
     assessor: Assessor | None = None
     log: list = field(default_factory=list)
@@ -169,6 +221,8 @@ class Mission:
     def __post_init__(self):
         if not self.bearings:
             raise ValueError("at least one viewpoint is needed")
+        self.body = as_body(self.person)
+        self.person = self.body.chest
         self.view = 0
         self._path = None
         self._since = self._progress = None
@@ -253,7 +307,7 @@ class Mission:
 
     def _drive(self, t, pose, moving):
         if self._path is None:
-            self._path = ring_path(pose, self.person, self.bearings[self.view])
+            self._path = ring_path(pose, self.body, self.bearings[self.view])
             self._progress = t
         if moving:
             self._progress = t
@@ -273,7 +327,9 @@ class SimulatedBase:
     """Wheels that slip a little, for trying the controller without hardware."""
 
     def __init__(self, pose, person, rng, obstacles=(), slip=0.03):
-        self.pose, self.person, self.rng, self.obstacles, self.slip = pose, person, rng, obstacles, slip
+        self.pose, self.rng, self.obstacles, self.slip = pose, rng, obstacles, slip
+        self.body = as_body(person)
+        self.person = self.body.chest
 
     def step(self, drive, dt):
         speed = drive.speed * (1 + self.rng.normal(0, self.slip))
@@ -301,7 +357,8 @@ class SimulatedBase:
     def tell(self, guard, t):
         guard.link(t)
         guard.sensors(t, *self.ranges())
-        dx, dy = self.person[0] - self.pose.x, self.person[1] - self.pose.y
+        nx, ny = self.body.nearest(self.pose.x, self.pose.y)
+        dx, dy = nx - self.pose.x, ny - self.pose.y
         ahead = dx * math.cos(self.pose.heading) + dy * math.sin(self.pose.heading)
         guard.person(t, math.hypot(dx, dy), ahead > 0)
 

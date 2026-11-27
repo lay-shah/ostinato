@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .rover import Pose, wrap
+from .rover import Pose, as_body, wrap
 
 DICTIONARY = cv2.aruco.DICT_4X4_50
 MARKER = 0.16  # m, side of the printed black square
@@ -217,10 +217,12 @@ class Localizer:
         return True
 
     def tell(self, guard, t, person):
-        """Tell the guard how near the person is, erring toward nearer."""
+        """Tell the guard how near the person's body is, erring toward nearer. `person`
+        is a Body, or (x, y) for a point."""
         if not self.good:
             return
-        dx, dy = person[0] - self.x[0], person[1] - self.x[1]
+        nx, ny = as_body(person).nearest(self.x[0], self.x[1])
+        dx, dy = nx - self.x[0], ny - self.x[1]
         ahead = dx * math.cos(self.x[2]) + dy * math.sin(self.x[2])
         guard.person(t, math.hypot(dx, dy) - 2 * self.uncertainty[0], ahead > 0)
 
