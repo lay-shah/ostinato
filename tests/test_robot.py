@@ -479,7 +479,10 @@ def test_run_log(program, tmp_path, capsys):
     log = tmp_path / "logs" / "run.jsonl"
     program(Camera(40, each=lambda n: time.sleep(0.03)), keys=[ord("g")], extra=["--log", str(log)])
     rows = [json.loads(line) for line in log.read_text().splitlines()]
-    assert len(rows) >= 2 and {"x", "y", "within", "guard", "state", "markers", "shaking", "outcome"} <= rows[0].keys()
+    assert (
+        len(rows) >= 2
+        and {"x", "y", "within", "guard", "state", "markers", "shaking", "outcome"} <= rows[0].keys()
+    )
     assert all(isinstance(r["markers"], list) for r in rows)
     capsys.readouterr()
     main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])
@@ -533,7 +536,16 @@ def test_replay_summary(tmp_path):
     text = summarize(path, setup_with(tmp_path))
     assert "about 1.0 m driven" in text and "1.33 m" in text
     assert "Lost its position at 1 s" in text and "Stopped because the person" in text
-    assert "emergency stop: 0.5 s" in text
+    assert "emergency stop: 0.5 s" in text and "shaking" not in text  # an older log
+    settling = {**rows[1], "guard": "ok", "state": "settling", "outcome": "in progress"}
+    shaky = [
+        {**settling, "t": 1.5 + k / 2, "view": v, "shaking": k < n}
+        for v, n in ((0, 3), (1, 1))
+        for k in range(4)
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *shaky]))
+    text = summarize(path, setup_with(tmp_path))
+    assert "Waited for the camera to stop shaking: view 1 1.5 s, view 2 0.5 s" in text
     path.write_text("{broken")
     with pytest.raises(ValueError):
         summarize(path, setup_with(tmp_path))
@@ -554,7 +566,10 @@ def test_a_raised_hand_ends_it_where_it_is(board_program, setup):
         board_program, setup, 2, until=State.DONE, seconds=200, breathing=False, ask=True, hand=3
     )
     assert len(robot.asks) == 1 and robot.mission.view == 0
-    assert robot.mission.state is State.DONE and robot.mission.outcome == "hand raised when asked; breathing was not measured"
+    assert (
+        robot.mission.state is State.DONE
+        and robot.mission.outcome == "hand raised when asked; breathing was not measured"
+    )
     assert robot.drive == STOP
 
 
