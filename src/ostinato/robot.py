@@ -349,6 +349,13 @@ def summarize(path, setup):
         lines.append(f"Stopped because {next(r['problem'] for r in rows if r['problem'])}.")
     for reason, count in sorted(stops.items(), key=lambda kv: -kv[1]):
         lines.append(f"Held by the guard, {reason}: {count / 2:.1f} s")
+    shook = {}
+    for r in rows:
+        if r.get("shaking") and r["state"] == "settling":  # older logs have no "shaking"
+            shook[r["view"]] = shook.get(r["view"], 0) + 1
+    if shook:
+        each = ", ".join(f"view {view + 1} {count / 2:.1f} s" for view, count in sorted(shook.items()))
+        lines.append(f"Waited for the camera to stop shaking: {each}")
     return "\n".join(lines)
 
 
