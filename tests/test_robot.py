@@ -177,6 +177,9 @@ def test_waits_for_a_steady_picture(board_program, setup):
     times = {state: t for t, state, _ in robot.mission.log}
     assert robot.mission.state is State.MEASURING and not robot.moved_while_shaking
     assert times["measuring"] >= settled + 4 + 2 - 0.1
+    robot.mission._go(0, State.SETTLING)
+    robot.shaking = True
+    assert robot.status().startswith("settling, waiting for the camera to stop shaking;")
 
 
 def test_measures_and_reports(board_program, setup):

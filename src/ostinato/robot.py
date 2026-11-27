@@ -302,7 +302,10 @@ class Robot:
         where = "lost: place it again" if self.localizer.lost else f"position within {100 * place:.0f} cm"
         if not (self.localizer.good or self.localizer.lost):
             where += ", looking for a marker" if self.searched < 2 * math.pi else ", no marker found"
-        return f"{self.mission.state.value}; {self.guard.reason}; {where}; {self.mission.outcome}"
+        state = self.mission.state.value
+        if self.shaking and self.mission.state is State.SETTLING:
+            state += ", waiting for the camera to stop shaking"
+        return f"{state}; {self.guard.reason}; {where}; {self.mission.outcome}"
 
 
 def summarize(path, setup):
