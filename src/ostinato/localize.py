@@ -29,6 +29,10 @@ MAX_REJECTS = 5  # this many in a row means the estimate, not the marker, is wro
 GOOD = 0.15  # m, the largest uncertainty (one standard deviation) to drive with
 GOOD_HEADING = 0.25  # rad
 MAX_STEP = 0.5  # m between updates; more means a bad encoder reading
+# A marker is used again only from a new view: its errors from one spot partly repeat, so
+# seeing it again from there adds little, though the filter would count it as a fresh fix.
+NEW_VIEW = 0.1  # m driven, or
+NEW_VIEW_TURN = 0.1  # rad turned
 
 
 @dataclass(frozen=True)
@@ -131,6 +135,8 @@ class Localizer:
         self.markers, self.track = dict(markers), track
         self.lost = False
         self._rejects = 0
+        self._rolled = self._turned = 0.0  # in all, by the wheels
+        self._used = {}  # marker: (rolled, turned) when it was last used
 
     @property
     def pose(self):
@@ -157,6 +163,8 @@ class Localizer:
         rolled = left, right
         left, right = left * (1 + self.x[3]), right * (1 + self.x[4])
         middle, turn = (left + right) / 2, (right - left) / self.track
+        self._rolled += abs(middle)
+        self._turned += abs(turn)
         a = self.x[2] + turn / 2
         c, s = math.cos(a), math.sin(a)
         self.x[:3] += middle * c, middle * s, turn
@@ -178,10 +186,14 @@ class Localizer:
         self.P = F @ self.P @ F.T + Q
 
     def see(self, sighting):
-        """Use one marker. Returns whether it was believed."""
+        """Use one marker. Returns whether it was believed. Seen again from the same view,
+        it is believed but not used again."""
         place = self.markers.get(sighting.marker)
         if place is None or not (math.isfinite(sighting.bearing) and 0.1 < sighting.distance < 10):
             return False
+        last = self._used.get(sighting.marker)
+        if last and self._rolled - last[0] < NEW_VIEW and self._turned - last[1] < NEW_VIEW_TURN:
+            return True
         dx, dy = place[0] - self.x[0], place[1] - self.x[1]
         q = dx * dx + dy * dy
         r = math.sqrt(q)
@@ -196,6 +208,7 @@ class Localizer:
             self.lost |= self._rejects >= MAX_REJECTS
             return False
         self._rejects = 0
+        self._used[sighting.marker] = (self._rolled, self._turned)
         K = np.linalg.solve(S, H @ self.P).T
         self.x += K @ error
         self.x[2] = wrap(self.x[2])

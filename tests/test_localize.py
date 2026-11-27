@@ -218,3 +218,33 @@ def test_ground_point_refuses_the_horizon():
     assert localize.ground(camera, (640, 300), 0.6) is None
     assert localize.ground(camera, (640, 700), 0) is None
     assert localize.ground(camera, (math.nan, 700), 0.6) is None
+
+
+def test_one_view_of_a_marker_counts_once():
+    def stare(times, step=0.0):
+        loc = Localizer(Pose(0, 0, 0), {1: (3.0, 0.0)}, TRACK, sigma=(0.3, 0.3, 0.05))
+        for i in range(1, times + 1):
+            loc.drive(step, step)
+            # The same 3% too far every time, as a slightly wrong calibration would give.
+            assert loc.see(Sighting(1, (3.0 - i * step) * 1.03, 0.0))
+        return loc
+
+    once, many = stare(1), stare(100)
+    assert np.allclose(many.P, once.P) and np.allclose(many.x, once.x)
+    # Still honest: the error it has is within what it admits to.
+    assert abs(many.pose.x) < 2 * math.sqrt(many.P[0, 0])
+    # From new places along the way, each sighting is used.
+    assert stare(10, step=0.1).P[0, 0] < once.P[0, 0]
+
+
+def test_a_new_view_also_comes_from_turning():
+    loc = Localizer(Pose(0, 0, 0), {1: (3.0, 0.0)}, TRACK)
+    loc.see(Sighting(1, 3.0, 0.0))
+    loc.drive(-0.01, 0.01)  # turned 0.07 rad: not a new view yet
+    p = loc.P.copy()
+    loc.see(Sighting(1, 3.0, -0.067))
+    assert np.array_equal(loc.P, p)
+    loc.drive(-0.01, 0.01)  # 0.13 rad in all
+    p = loc.P.copy()
+    loc.see(Sighting(1, 3.0, -0.133))
+    assert loc.P[2, 2] < p[2, 2]
