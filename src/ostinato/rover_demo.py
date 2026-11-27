@@ -21,6 +21,7 @@ from .localize import Sighting
 from .motors import seal
 from .robot import Robot, Setup
 from .rover import KEEP_OUT, RING, STOP, Drive, Pose, SimulatedBase, State, wrap
+from .shake import Steadiness
 from .ui import AMBER, BG, BLUE, CARD, DIM, GREEN, INK, LINE, font
 
 W, H = 1080, 600
@@ -33,6 +34,7 @@ MARKERS = {1: (0.0, 2.4), 2: (2.6, 0.0), 3: (0.0, -2.4), 4: (-2.6, 0.0)}
 TRACK = 0.27
 TICKS = 2000  # per meter
 ASK_SECONDS = 10.0
+WOBBLE = (8.0, 3.0, 0.5)  # px across the drawn picture, Hz, and seconds to die down, after stopping
 LABEL = "SIMULATED: drawn person, map, and driving. No robot exists yet."
 
 
@@ -86,6 +88,7 @@ class RoverDemo:
         self.mission = self.robot.mission
         self.t, self.drive, self.trail, self.seen = 0.0, STOP, [], []
         self.frame = self.reading = None
+        self.steady, self.stopped_at, self.shaking = None, None, False
 
     def sightings(self):
         """Markers in front of the camera, measured a little wrongly."""
@@ -101,16 +104,32 @@ class RoverDemo:
         self.t += DT
         self.wheels.run(self.t, DT)
         measuring = self.mission.state is State.MEASURING
-        self.reading = None
-        if measuring:
+        self.reading, self.shaking = None, False
+        if self.mission.state is State.SETTLING:
+            # The mast swings after the stop. The real steadiness check watches the picture.
+            if self.steady is None:
+                self.steady, self.stopped_at = Steadiness(), self.t
+            self.scene.view = 1 if self.mission.view == 0 else 2
+            size, hertz, decay = WOBBLE
+            s = self.t - self.stopped_at
+            dx = size * math.exp(-s / decay) * math.cos(2 * math.pi * hertz * s)
+            frame = self.scene.draw(self.t)
+            m = np.float32([[1, 0, dx], [0, 1, 0.3 * dx]])
+            self.frame = cv2.warpAffine(frame, m, frame.shape[1::-1], borderMode=cv2.BORDER_REFLECT)
+            self.shaking = self.steady.update(self.t, cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)) is False
+        elif measuring:
             # Debris hides the chest from the first viewpoint only.
             self.scene.view = 1 if self.mission.view == 0 else 2
             self.frame = self.scene.draw(self.t)
             self.reading = self.monitor.update(self.frame, self.t)
         else:
             self.frame = None
+        if self.mission.state is not State.SETTLING:
+            self.steady = None
         self.seen = self.sightings() if round(self.t / DT) % 5 == 0 else []
-        self.drive = self.robot.step(self.t, sightings=self.seen, reading=self.reading, asking=self.asking)
+        self.drive = self.robot.step(
+            self.t, sightings=self.seen, reading=self.reading, asking=self.asking, shaking=self.shaking
+        )
         if self.mission.state is not State.MEASURING and measuring:
             self.monitor.reset()  # readings from one view never carry over
             self.asked_at = None
@@ -159,6 +178,8 @@ class RoverDemo:
                 f"{why}. Not measuring while moving.",
                 INK,
             )
+        if self.mission.state is State.SETTLING and self.shaking:
+            return f"{view}: stopped, camera still shaking", "Measuring once the picture is still.", AMBER
         return f"{view}: {self.mission.state.value}", "Waiting until it is still before measuring.", INK
 
     def position(self):
