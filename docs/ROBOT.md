@@ -7,7 +7,7 @@ A new rover that drives to one person, **stops**, and measures from a camera on 
 | Step | Done when | Tool | Cost |
 |---|---|---|---|
 | 1. Camera position | Counted-breath trials on people lying down, at several heights and distances, show where a rate is given and how far off it is | `python -m ostinato.trial` | $0 |
-| 2. Computer | It gives 10 frames/s or more | `python -m ostinato.speed --image photo.jpg` | borrow first |
+| 2. Computer | The speed test's rover line gives 10 frames/s or more, with a photo of a person | `python -m ostinato.speed --image photo.jpg` | borrow first |
 | 3. Chassis | Wheels far enough apart not to tip, with the real part weights | `python -m ostinato.tipping --part …` | $90-200 |
 | 4. Mast | The camera is steady within 2 s of every push | `python -m ostinato.shake` | $30-50 |
 | 5. Wiring | Every check passes with the wheels off the ground | [WIRING.md](WIRING.md), `python -m ostinato.bench` | $140-220 |
@@ -34,7 +34,7 @@ These are calculations. Real chest motion varies by person, clothing, and positi
 
 | Part | Requirement | Rough cost |
 |---|---|---:|
-| Computer | 10 frames/s in the speed test; Raspberry Pi 5 8 GB is a candidate, not yet tested | $175-200 |
+| Computer | 10 frames/s on the speed test's rover line; Raspberry Pi 5 8 GB is a candidate, not yet tested | $175-200 |
 | Chassis | Four wheels, encoders, about 3 kg payload; about 27 cm wide and long for a 0.8 m mast | $90-200 |
 | Motor board, driver, distance sensors | Arduino-compatible board, PWM and direction driver, two HC-SR04 | $30-50 |
 | Camera | 70 degrees across, 720p, fixed focus | $25-40 |
@@ -101,6 +101,6 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 
 - Breathing accuracy on people, seated or lying down
 - Whether blankets, thick clothing, or injuries hide chest motion
-- Frame rate on the robot's computer
+- Frame rate on the robot's computer. On an Apple M4 laptop, finding markers nearly doubles the time for each picture, so a computer that runs the desktop app well may still be too slow for the rover
 - How long the mast shakes after stopping
 - How well markers are read, and the person is found, by a real camera in a real room

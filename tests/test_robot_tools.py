@@ -26,10 +26,25 @@ def test_placement_table_says_it_is_calculated(capsys):
 def test_speed_without_the_pose_model():
     stages = speed.measure(lambda frame: None, frames=3)
     assert all(ms > 0 for name, ms in stages.items() if name != "pose model")
-    assert (
-        speed.frame_rate({"pose model": 60, "chest tracking": 39, "breathing estimate (once a second)": 10})
-        == 10
-    )
+    assert set(speed.ROVER) <= stages.keys() and "steadiness (rover, while settling)" in stages
+    times = {"pose model": 60, "chest tracking": 39, "breathing estimate (once a second)": 10}
+    assert speed.frame_rate(times) == 10
+    times.update({speed.ROVER[0]: 30, speed.ROVER[1]: 1, "steadiness (rover, while settling)": 2})
+    assert speed.frame_rate(times, rover=True) == pytest.approx(990 / 130)
+
+
+def test_speed_report(capsys, monkeypatch):
+    class Finder:
+        def __call__(self, frame):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(speed, "PoseFinder", Finder)
+    speed.main(["--frames", "2"])
+    out = capsys.readouterr().out
+    assert "Desktop app: about" in out and "Rover: about" in out and "markers, 1280 x 720" in out
 
 
 def test_speed_rejects_a_missing_image():
