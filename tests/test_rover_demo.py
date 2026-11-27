@@ -77,3 +77,20 @@ def test_asks_at_the_blocked_view_then_moves_on():
     assert asked and {view for view, _ in asked} == {0}
     assert all(drive == STOP for _, drive in asked)
     assert demo.measured and demo.mission.view == 1
+
+
+def test_waits_for_the_drawn_wobble_to_die_down():
+    demo, settling = RoverDemo(), []
+    while demo.mission.state is not State.MEASURING and demo.t < 60:
+        demo.step()
+        if demo.mission.state is State.SETTLING:
+            settling.append((demo.t, demo.shaking, demo.status()[0]))
+            assert demo.drive == STOP
+    assert demo.mission.state is State.MEASURING
+    start, end = settling[0][0], settling[-1][0]
+    shook = [t for t, shaking, _ in settling if shaking]
+    assert shook and shook[0] - start < 0.2  # from the start
+    # 8 px dies below the limit within about 2 s, then 2 s more of stillness.
+    assert 1.0 < shook[-1] - start < 3.0
+    assert end - shook[-1] >= 2.0 - 0.1
+    assert any("camera still shaking" in headline for _, shaking, headline in settling if shaking)
