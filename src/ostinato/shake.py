@@ -2,6 +2,9 @@
 
 Point the mounted camera at a still, detailed scene with nobody in it. When told, push
 the robot and stop it. No video is saved.
+
+The rover also uses `Steadiness` at each view, so it measures only once the picture
+is still, whatever the mast does.
 """
 
 import argparse
@@ -55,6 +58,36 @@ class ShiftTracker:
             return None
         self.place = self.place + step
         return self.place.copy()
+
+
+class Steadiness:
+    """Whether the picture is still enough to measure, while the rover waits at a view.
+
+    Follows the whole picture, at half size, and calls it steady when it has stayed
+    within LIMIT pixels for the last WINDOW seconds. That is twice STEADY, because the
+    picture's own grain moves the estimate by a few tenths of a pixel. Returns None when the picture has
+    too little detail to follow, so the rover falls back to waiting SETTLE seconds."""
+
+    WINDOW = 0.5  # s
+    LIMIT = 2 * STEADY  # px
+
+    def __init__(self):
+        self.tracker, self.recent = ShiftTracker(), []
+
+    def update(self, t, gray):
+        if gray.shape[1] > 640:
+            gray = cv2.resize(
+                gray, (640, round(640 * gray.shape[0] / gray.shape[1])), interpolation=cv2.INTER_AREA
+            )
+        place = self.tracker.update(gray)
+        if place is None:
+            self.recent = []
+            return None
+        self.recent = [(s, p) for s, p in self.recent if s >= t - self.WINDOW] + [(t, place)]
+        if self.recent[-1][0] - self.recent[0][0] < self.WINDOW * 0.8:
+            return False  # not watched long enough to say
+        points = np.array([p for _, p in self.recent])
+        return bool(np.linalg.norm(points - np.median(points, axis=0), axis=1).max() <= self.LIMIT)
 
 
 def analyze(times, places):

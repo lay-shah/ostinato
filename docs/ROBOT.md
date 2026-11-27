@@ -50,7 +50,7 @@ About $470-725 in total. The 27 cm comes from `python -m ostinato.tipping` with 
 - A person holds the emergency stop whenever the motors have power.
 - Slower than 0.3 m/s near people. Stop at least 1 m away. Never drive over or behind someone.
 - Motors stop if the computer, remote, or a sensor goes quiet for 0.5 s.
-- Never measure while moving.
+- Never measure while moving. After stopping, it waits until the picture itself has been still for 2 s, not just the wheels. If it never steadies within 10 s, it tries the next view. A blank wall cannot be followed, so there it only waits 2 s.
 - Check that it does not tip on a 10 degree slope or when stopping suddenly, with the mast on.
 - Use healthy adults who agree to take part. This is not a medical device.
 
@@ -94,6 +94,7 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 - With no marker in sight, it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again.
 - The person check caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
 - Drawn markers, 16 cm, read by a 720p 70 degree camera: facing it, reliably to 6 m when sharp and 5 m when blurred (2 px), with distances off by 1-3% and directions by about 0.001 rad. That is inside what the position estimate assumes (4% and 0.02 rad) to about 4 m. Turned 50 degrees away and blurred, only to about 3 m, and blurred in a dim room, 2 m. Without facings in the setup file, the check counts every marker within 4.9 m as seen, whichever way it faces.
+- With the picture shaking for 4 s after it stopped, the rover held still and began measuring 2 s after the shaking ended. The steadiness check settled on a still, grainy picture and waited out a simulated 10 px wobble.
 - The board program, on simulated motors 15% weaker than it assumes, held speed within 5% and stopped within about 0.5 s of silence.
 
 ## Still unknown
