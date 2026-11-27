@@ -104,7 +104,13 @@ def test_late_control_loop_stops(gap):
 
 
 def simulate(
-    seed, obstacles=(), reading=lambda view, t: GOOD, cut=None, seconds=400, bearings=(0.5, 2.2, -2.0)
+    seed,
+    obstacles=(),
+    reading=lambda view, t: GOOD,
+    cut=None,
+    seconds=400,
+    bearings=(0.5, 2.2, -2.0),
+    shaking=lambda view, t: False,
 ):
     """Run a mission and check the rules at every step."""
     rng = np.random.default_rng(seed)
@@ -118,7 +124,10 @@ def simulate(
         if cut is None or not cut[0] <= t <= cut[1]:
             base.tell(guard, t)
         measuring = mission.state is State.MEASURING
-        want = mission.update(t, base.pose, drive != STOP, reading(mission.view, t) if measuring else None)
+        shakes = mission.state is State.SETTLING and shaking(mission.view, t)
+        want = mission.update(
+            t, base.pose, drive != STOP, reading(mission.view, t) if measuring else None, shaking=shakes
+        )
         drive = guard.allow(t, want)
         assert abs(drive.speed) <= MAX_SPEED and abs(drive.turn) <= rover.MAX_TURN
         if measuring or mission.state is State.SETTLING:
@@ -191,3 +200,23 @@ def test_turning_in_place_needs_no_news_of_the_person():
     assert guard.allow(0.3, Drive(0.1, 0.5)) == STOP and guard.reason == "no news from person"
     guard.link(0.4), guard.sensors(0.4, 5, 5), guard.person(0.4, math.nan, True)
     assert guard.allow(0.4, Drive(0.1, 0.0)) == STOP and guard.reason == "invalid sensor"
+
+
+def test_waits_for_the_camera_to_stop_shaking():
+    plain, _, _ = simulate(2061)
+    settled = next(t for t, state, _ in plain.log if state == "settling")
+    # Shaking for 3 s after it stops at the first view.
+    mission, _, _ = simulate(2061, shaking=lambda view, t: t < settled + 3)
+    times = {state: t for t, state, _ in mission.log}
+    assert times["measuring"] - times["settling"] >= 3 + rover.SETTLE - 0.06
+    assert mission.outcome == "15.0 breaths/min"
+
+
+def test_a_view_that_never_steadies_is_given_up():
+    mission, closest, _ = simulate(2062, shaking=lambda view, t: view == 0)
+    assert mission.outcome == "15.0 breaths/min" and mission.view == 1 and closest >= KEEP_OUT
+    states = [(state, view) for _, state, view in mission.log]
+    assert ("measuring", 0) not in states and ("measuring", 1) in states
+    mission, _, _ = simulate(2063, shaking=lambda view, t: True, bearings=(0.5, 2.2))
+    assert mission.state is State.DONE and "measuring" not in [s for _, s, _ in mission.log]
+    assert "a person must check" in mission.outcome

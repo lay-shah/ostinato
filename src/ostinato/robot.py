@@ -40,6 +40,7 @@ from .calibrate import Calibration
 from .localize import MARKER, Camera, Localizer, find_markers, ground, place
 from .motors import Board
 from .rover import KEEP_OUT, RING, STOP, Drive, Guard, Mission, Pose, State, wrap
+from .shake import Steadiness
 
 CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
 MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
@@ -176,7 +177,7 @@ class Robot:
         self.guard = guard or Guard()
         self.localizer = Localizer(setup.start, setup.markers, setup.track)
         self.mission = Mission(setup.person, list(setup.views), ask_first=ask)
-        self.drive, self.moving = STOP, False
+        self.drive, self.moving, self.shaking = STOP, False, False
         self._last = None
         self.seen_person = deque(maxlen=LOOKS)
         self.confirmed = 0  # sightings of the person in place at this viewpoint
@@ -184,9 +185,20 @@ class Robot:
         self.searched = 0.0  # radians turned looking for a marker since it was last sure
         self.seen = []  # markers believed in the last step
 
-    def step(self, t, link=True, sightings=(), reading=None, responded=False, asking=False, chest=None):
+    def step(
+        self,
+        t,
+        link=True,
+        sightings=(),
+        reading=None,
+        responded=False,
+        asking=False,
+        chest=None,
+        shaking=False,
+    ):
         """`link` is whether the operator is there. `chest` is the middle of the person's
-        shoulders and hips in the picture, when seen. Returns the command sent."""
+        shoulders and hips in the picture, when seen. `shaking` is whether the picture
+        still moves. Returns the command sent."""
         if link:
             self.guard.link(t)
         for report in self.board.receive(t, self.guard):
@@ -205,7 +217,8 @@ class Robot:
         self.localizer.tell(self.guard, t, self.setup.person)
         moving = self.moving or self.drive != STOP
         was = self.mission.state
-        want = self.mission.update(t, self.localizer.pose, moving, reading, responded, asking)
+        self.shaking = shaking
+        want = self.mission.update(t, self.localizer.pose, moving, reading, responded, asking, shaking)
         if was is State.MEASURING and self.mission.state is not State.MEASURING:
             # Out of the picture, a person who moved may be right beside the rover.
             if (
@@ -277,6 +290,7 @@ class Robot:
             "turn": round(self.drive.turn, 3),
             "front": None if report is None or report.front != report.front else report.front,
             "rear": None if report is None or report.rear != report.rear else report.rear,
+            "shaking": self.shaking,
             "problem": self.person_problem,
             "outcome": self.mission.outcome,
         }
@@ -288,7 +302,10 @@ class Robot:
         where = "lost: place it again" if self.localizer.lost else f"position within {100 * place:.0f} cm"
         if not (self.localizer.good or self.localizer.lost):
             where += ", looking for a marker" if self.searched < 2 * math.pi else ", no marker found"
-        return f"{self.mission.state.value}; {self.guard.reason}; {where}; {self.mission.outcome}"
+        state = self.mission.state.value
+        if self.shaking and self.mission.state is State.SETTLING:
+            state += ", waiting for the camera to stop shaking"
+        return f"{state}; {self.guard.reason}; {where}; {self.mission.outcome}"
 
 
 def summarize(path, setup):
@@ -410,7 +427,7 @@ def main(argv=None):
     monitor, check = Monitor(ChestTracker(finder)), ResponseCheck(Speaker())
     robot = Robot(setup, port, ask=not args.no_prompt)
     robot.guard.emergency_stop()
-    title, start, was, logged = "Ostinato rover", time.monotonic(), None, -1.0
+    title, start, was, logged, steady = "Ostinato rover", time.monotonic(), None, -1.0, None
     if listener:
         print(
             f"Stopped. Waiting for the remote on port {listener.port}. Keep the hardware emergency stop in hand."
@@ -433,6 +450,12 @@ def main(argv=None):
                 )
                 reading = monitor.update(small, t)
                 responded = check.update(t, finder.body)
+            shaking = False
+            if robot.mission.state is State.SETTLING:
+                steady = steady or Steadiness()  # fresh at each view
+                shaking = steady.update(t, gray) is False
+            else:
+                steady = None
             chest = None
             if measuring and finder.points is not None:
                 chest = tuple(finder.points.mean(axis=0) * (frame.shape[1] / 640))
@@ -441,7 +464,14 @@ def main(argv=None):
                 listener.poll(t, robot.guard, robot.status())  # tells the guard itself
                 link = False
             robot.step(
-                t, link, find_markers(gray, setup.camera), reading, bool(responded), check.active, chest
+                t,
+                link,
+                find_markers(gray, setup.camera),
+                reading,
+                bool(responded),
+                check.active,
+                chest,
+                shaking,
             )
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next

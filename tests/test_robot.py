@@ -145,6 +145,10 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
                 responded=raised,
                 asking=asking,
                 chest=chest,
+                shaking=robot.mission.state is State.SETTLING and t < trouble.get("shaking", 0),
+            )
+            robot.moved_while_shaking = getattr(robot, "moved_while_shaking", False) or (
+                robot.shaking and robot.drive != STOP
             )
             if robot.wants_ask:
                 asks.append(t)
@@ -164,6 +168,18 @@ def test_reaches_a_view_and_keeps_away(board_program, setup, loss):
     runs = [drive(board_program, setup, seed, loss=loss) for seed in range(6)]
     assert sum(r.mission.state is State.MEASURING for r, _, _ in runs) >= 5
     assert min(n for _, n, _ in runs) > KEEP_OUT
+
+
+def test_waits_for_a_steady_picture(board_program, setup):
+    plain, _, _ = drive(board_program, setup, 1)
+    settled = next(t for t, state, _ in plain.mission.log if state == "settling")
+    robot, _, _ = drive(board_program, setup, 1, shaking=settled + 4)
+    times = {state: t for t, state, _ in robot.mission.log}
+    assert robot.mission.state is State.MEASURING and not robot.moved_while_shaking
+    assert times["measuring"] >= settled + 4 + 2 - 0.1
+    robot.mission._go(0, State.SETTLING)
+    robot.shaking = True
+    assert robot.status().startswith("settling, waiting for the camera to stop shaking;")
 
 
 def test_measures_and_reports(board_program, setup):
@@ -463,7 +479,7 @@ def test_run_log(program, tmp_path, capsys):
     log = tmp_path / "logs" / "run.jsonl"
     program(Camera(40, each=lambda n: time.sleep(0.03)), keys=[ord("g")], extra=["--log", str(log)])
     rows = [json.loads(line) for line in log.read_text().splitlines()]
-    assert len(rows) >= 2 and {"x", "y", "within", "guard", "state", "markers", "outcome"} <= rows[0].keys()
+    assert len(rows) >= 2 and {"x", "y", "within", "guard", "state", "markers", "shaking", "outcome"} <= rows[0].keys()
     assert all(isinstance(r["markers"], list) for r in rows)
     capsys.readouterr()
     main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])

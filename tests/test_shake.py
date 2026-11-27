@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from ostinato.shake import STEADY, ShiftTracker, analyze, describe
+from ostinato.shake import STEADY, ShiftTracker, Steadiness, analyze, describe
 
 
 def shaking(size=20.0, hertz=4.0, decay=0.5, fps=30, seconds=8.0, start=1.0, noise=0.03, seed=0):
@@ -70,3 +70,39 @@ def test_blank_picture():
     tracker, blank = ShiftTracker(), np.full((360, 640), 90, np.uint8)
     tracker.update(blank)
     assert tracker.update(blank) is None
+
+
+def scene(rng, width=1280, height=720):
+    small = rng.integers(0, 255, (45, 80), np.uint8).astype(np.uint8)
+    return cv2.resize(small, (width, height), interpolation=cv2.INTER_CUBIC)
+
+
+def shifted(picture, x, y, rng, grain=3):
+    m = np.float32([[1, 0, x], [0, 1, y]])
+    moved = cv2.warpAffine(picture, m, picture.shape[::-1], flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+    return np.clip(moved + rng.normal(0, grain, moved.shape), 0, 255).astype(np.uint8)
+
+
+def test_steadiness_waits_for_the_wobble_to_die_down():
+    rng = np.random.default_rng(3)
+    still, steady = scene(rng), Steadiness()
+    t, places = shaking(size=10, hertz=4, decay=0.4, seconds=4, start=0.2, noise=0)
+    said = [steady.update(s, shifted(still, x, y, rng)) for s, (x, y) in zip(t, places)]
+    assert not any(said[: int(0.6 * 30)])  # too soon, then shaking
+    assert all(said[-int(1.0 * 30) :])  # settled by the end, despite the grain
+    first = t[said.index(True)]
+    # 10 px decays below the limit at about 0.4 ln(10 / 0.6) = 1.1 s after the push.
+    assert 0.9 < first < 2.2
+
+
+def test_steadiness_on_a_still_grainy_picture():
+    rng = np.random.default_rng(4)
+    still, steady = scene(rng), Steadiness()
+    said = [steady.update(i / 30, shifted(still, 0, 0, rng, grain=6)) for i in range(60)]
+    assert all(said[20:])
+
+
+def test_steadiness_cannot_tell_on_a_blank_wall():
+    steady, blank = Steadiness(), np.full((720, 1280), 90, np.uint8)
+    steady.update(0.0, blank)
+    assert steady.update(0.1, blank) is None

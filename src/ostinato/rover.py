@@ -211,8 +211,9 @@ class Mission:
             return self._go(t, State.DRIVING)
         return self._go(t, State.DONE)
 
-    def update(self, t, pose, moving, reading=None, responded=False, asking=False):
-        """Return the wanted command. `moving` is whether the wheels turned last time."""
+    def update(self, t, pose, moving, reading=None, responded=False, asking=False, shaking=False):
+        """Return the wanted command. `moving` is whether the wheels turned last time, and
+        `shaking` whether the picture still moves although they did not."""
         if self._since is None:
             self._go(t, State.DRIVING)
         if self.state is State.DRIVING:
@@ -223,14 +224,18 @@ class Mission:
             error = wrap(toward - math.pi / 2 - pose.heading)
             if abs(error) < 0.05:
                 self._go(t, State.SETTLING)
+                self._stopped = t
                 return STOP
             if t - self._since > BLOCKED:
                 self._next(t, failed=True)
                 return STOP
             return Drive(0.0, math.copysign(min(0.5, max(0.1, 2 * abs(error))), error))
         if self.state is State.SETTLING:
-            if moving:
+            if moving or shaking:
                 self._since = t
+                if t - self._stopped > BLOCKED:
+                    # Never still enough to measure here: a bumped mast or a shaking floor.
+                    self._next(t, failed=True)
             elif t - self._since >= SETTLE:
                 if self.assessor is None:
                     self.assessor = Assessor(t, len(self.bearings) - 1 - self.view, ask_first=self.ask_first)
