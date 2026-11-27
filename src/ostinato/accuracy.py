@@ -88,6 +88,15 @@ def by_view(pairs, tolerance_bpm=2.0):
     return out
 
 
+def chance(k, n):
+    """How often two equally good views would split n trials at least as unevenly as k
+    to n - k, by luck alone (two-sided sign test). None without trials."""
+    if n == 0:
+        return None
+    low = min(k, n - k)
+    return min(1.0, 2 * sum(math.comb(n, i) for i in range(low + 1)) / 2**n)
+
+
 def head_to_head(pairs):
     """The two views of each trial watched the same breaths, so compare them trial by trial."""
     out = {}
@@ -110,7 +119,21 @@ def head_to_head(pairs):
                 row["tied"] += 1
             else:
                 row["closer"][a.view if ea < eb else b.view] += 1
+    for row in out.values():
+        first, second = row["closer"].values()
+        row["closer_chance"] = chance(first, first + second)
+        first, second = row["only"].values()
+        row["only_chance"] = chance(first, first + second)
     return out
+
+
+def _luck(p):
+    """A sentence on whether an uneven split could be luck. Nothing for an even one."""
+    if p is None or p >= 1:
+        return ""
+    share = "less than 1%" if p < 0.01 else f"{p:.0%}"
+    text = f" Equally good views would split at least this unevenly {share} of the time by luck"
+    return text + (", so this does not yet show one is better." if p >= 0.05 else ".")
 
 
 def compare_lines(result):
@@ -140,8 +163,11 @@ def duel_lines(result):
             parts.append(
                 f"both gave a rate in {h['both']}; {a} was closer in {h['closer'][a]}, "
                 f"{b} in {h['closer'][b]}, and in {h['tied']} they were within {TIE:g} breaths/min of each other."
+                + _luck(h["closer_chance"])
             )
         parts += [f"Only {view} gave a rate in {n}." for view, n in h["only"].items() if n]
+        if any(h["only"].values()):
+            parts[-1] += _luck(h["only_chance"])
         if h["neither"]:
             parts.append(f"Neither did in {h['neither']}.")
         lines.append(" ".join(parts))
