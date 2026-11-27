@@ -497,6 +497,8 @@ def test_run_log(program, tmp_path, capsys):
         and {"x", "y", "within", "guard", "state", "markers", "shaking", "outcome"} <= rows[0].keys()
     )
     assert all(isinstance(r["markers"], list) for r in rows)
+    rates = [r["fps"] for r in rows if r["fps"]]
+    assert rates and all(5 < rate < 40 for rate in rates)  # pictures 0.03 s apart, plus the work
     capsys.readouterr()
     main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])
     out = capsys.readouterr().out
@@ -559,6 +561,13 @@ def test_replay_summary(tmp_path):
     path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *shaky]))
     text = summarize(path, setup_with(tmp_path))
     assert "Waited for the camera to stop shaking: view 1 1.5 s, view 2 0.5 s" in text
+    assert "Pictures a second" not in text  # no rates in this log
+    timed = [{**r, "fps": f} for r, f in zip(shaky, (15, 15, 15, 8, 15, 15, 6, 15))]
+    timed[6]["state"] = "measuring"
+    path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *timed]))
+    text = summarize(path, setup_with(tmp_path))
+    assert "Pictures a second: typically 15, lowest 6." in text
+    assert "Below 10 a second for 1.0 s, 0.5 s of it while measuring." in text
     path.write_text("{broken")
     with pytest.raises(ValueError):
         summarize(path, setup_with(tmp_path))

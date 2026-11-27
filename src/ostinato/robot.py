@@ -46,6 +46,7 @@ CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
 MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
 LOOKS = 15  # sightings of the person before judging
 SEARCH_TURN = 0.4  # rad/s, turning in place to find a marker when unsure where it is
+MIN_FPS = 10  # pictures a second; as `python -m ostinato.speed` aims for
 STILL_LOOKS = 0.5  # s between looks for markers while stopped: nothing changes but the noise
 
 
@@ -179,6 +180,7 @@ class Robot:
         self.localizer = Localizer(setup.start, setup.markers, setup.track)
         self.mission = Mission(setup.person, list(setup.views), ask_first=ask)
         self.drive, self.moving, self.shaking = STOP, False, False
+        self._frames = deque(maxlen=31)  # times of the last pictures
         self._last = None
         self.seen_person = deque(maxlen=LOOKS)
         self.confirmed = 0  # sightings of the person in place at this viewpoint
@@ -246,6 +248,17 @@ class Robot:
         self.board.send(self.drive)
         return self.drive
 
+    def picture(self, t):
+        """Note that the camera gave a picture at time t."""
+        self._frames.append(t)
+
+    @property
+    def fps(self):
+        """Pictures a second, over the last 30. None until there are two."""
+        if len(self._frames) < 2 or self._frames[-1] <= self._frames[0]:
+            return None
+        return (len(self._frames) - 1) / (self._frames[-1] - self._frames[0])
+
     def wants_markers(self, t):
         """Whether to look for markers in this picture. Every picture while it may move;
         twice a second while stopped, which saves time for measuring and keeps one view
@@ -305,6 +318,7 @@ class Robot:
             "front": None if report is None or report.front != report.front else report.front,
             "rear": None if report is None or report.rear != report.rear else report.rear,
             "shaking": self.shaking,
+            "fps": None if self.fps is None else round(self.fps, 1),
             "problem": self.person_problem,
             "outcome": self.mission.outcome,
         }
@@ -356,6 +370,18 @@ def summarize(path, setup):
     if shook:
         each = ", ".join(f"view {view + 1} {count / 2:.1f} s" for view, count in sorted(shook.items()))
         lines.append(f"Waited for the camera to stop shaking: {each}")
+    rates = [r["fps"] for r in rows if r.get("fps")]  # older logs have none
+    if rates:
+        slow = sum(rate < MIN_FPS for rate in rates)
+        lines.append(f"Pictures a second: typically {np.median(rates):.0f}, lowest {min(rates):.0f}.")
+        if slow:
+            measuring = sum(
+                bool(r.get("fps")) and r["fps"] < MIN_FPS and r["state"] == "measuring" for r in rows
+            )
+            lines.append(
+                f"Below {MIN_FPS} a second for {slow / 2:.1f} s, {measuring / 2:.1f} s of it while measuring. "
+                "Breathing may be missed then; see `python -m ostinato.speed`."
+            )
     return "\n".join(lines)
 
 
@@ -462,6 +488,7 @@ def main(argv=None):
                 print("The camera stopped or gives the wrong size.")
                 break
             t = time.monotonic() - start
+            robot.picture(t)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             measuring = robot.mission.state is State.MEASURING
             reading = responded = None
