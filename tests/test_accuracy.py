@@ -92,6 +92,8 @@ def test_views_compared_trial_by_trial():
         "tied": 1,
         "only": {"A": 1, "B": 1},
         "neither": 1,
+        "closer_chance": 1.0,
+        "only_chance": 1.0,
     }
     text = " ".join(compare_lines(analyze(pairs)))
     assert "A vs B, 5 trials: both gave a rate in 2; A was closer in 1, B in 0" in text
@@ -106,3 +108,24 @@ def test_views_from_different_postures_are_kept_apart():
     assert set(result["by_view"]) == {"A", "B", "side-high", "side-low"}
     assert set(result["head_to_head"]) == {"A vs B", "side-high vs side-low"}
     assert result["head_to_head"]["side-high vs side-low"]["closer"] == {"side-high": 0, "side-low": 1}
+
+
+def test_chance():
+    from ostinato.accuracy import chance
+
+    assert chance(0, 0) is None and chance(2, 2) == 0.5 and chance(1, 2) == 1.0
+    assert chance(3, 4) == pytest.approx(0.625) and chance(1, 4) == chance(3, 4)
+    assert chance(0, 5) == pytest.approx(0.0625) and chance(1, 10) == pytest.approx(0.0215, abs=1e-4)
+
+
+def test_few_trials_are_not_called_a_win():
+    pairs = [(window(16.0, 8), window(18.0, 8, "B"))] * 3 + [(window(18.0, 8), window(16.0, 8, "B"))]
+    (h,) = analyze(pairs)["head_to_head"].values()
+    assert h["closer"] == {"A": 3, "B": 1} and h["closer_chance"] == pytest.approx(0.625)
+    text = " ".join(compare_lines(analyze(pairs)))
+    assert "62% of the time by luck, so this does not yet show one is better." in text
+    many = analyze([(window(16.0, 8), window(18.0, 8, "B"))] * 10)
+    text = " ".join(compare_lines(many))
+    assert "less than 1% of the time by luck." in text and "does not yet" not in text
+    even = analyze([(window(16.0, 8), window(18.0, 8, "B")), (window(18.0, 8), window(16.0, 8, "B"))])
+    assert "by luck" not in " ".join(compare_lines(even))
