@@ -3,6 +3,7 @@ import math
 import random
 import subprocess
 import time
+from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
@@ -472,6 +473,17 @@ def test_setup_check_knows_which_way_markers_face(tmp_path):
     for bad in ([-3, 0, 90, 1], [-3, 0, 1e400]):
         with pytest.raises(ValueError, match="setup file"):
             setup_with(tmp_path, markers={"4": bad})
+
+
+def test_the_example_room_is_complete_and_passes(capsys):
+    from ostinato.robot import check_setup
+
+    path = Path(__file__).parent.parent / "docs" / "room.example.json"
+    setup = Setup.load(path)
+    assert set(setup.facings) == set(setup.markers) and setup.lens_height == 0.8
+    assert check_setup(setup) == ([], [])
+    main(["--setup", str(path), "--check"])
+    assert "No problems found." in capsys.readouterr().out
 
 
 def test_check_command(tmp_path, capsys):
