@@ -10,5 +10,6 @@
     "3": [2.5, -1.4, 150],
     "4": [3.0, 0.0, 180]
   },
-  "camera": {"fov": 70, "pitch": 20, "height": 0.8}
+  "camera": {"fov": 70, "pitch": 20, "height": 0.8},
+  "battery_low": 10.5
 }

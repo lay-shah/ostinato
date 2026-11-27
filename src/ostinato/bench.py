@@ -68,6 +68,12 @@ class Bench:
             f"distance sensors read {r.front:.2f} m and {r.rear:.2f} m",
             "a distance sensor does not answer: check its wiring",
         )
+        self.check(
+            r.battery == r.battery,
+            f"battery reads {r.battery:.2f} V: check it against a meter, and set BATTERY_MV_PER_COUNT "
+            "in the board program if they differ by more than 0.2 V",
+            "the battery is not reported: check the divider into A1",
+        )
         self.ask("Press the emergency stop, then press Enter here.")
         self.check(
             any(x.estop for x in self.listen(0.5)),

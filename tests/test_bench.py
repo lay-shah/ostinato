@@ -10,7 +10,13 @@ class FakeBoard:
     """A board with wiring faults to choose from, on a clock the bench controls."""
 
     def __init__(
-        self, swapped=False, backward=False, no_watchdog=False, estop_wired=True, silent_sensor=False
+        self,
+        swapped=False,
+        backward=False,
+        no_watchdog=False,
+        estop_wired=True,
+        silent_sensor=False,
+        no_battery=False,
     ):
         self.t, self.out = 0.0, b""
         self.fault = {
@@ -20,6 +26,7 @@ class FakeBoard:
             "estop_wired": estop_wired,
         }
         self.silent = silent_sensor
+        self.battery_mv = 0 if no_battery else 12150
         self.estop, self.armed, self.speeds, self.heard = False, False, (0, 0), -1.0
         self.ticks, self.next_report = [0.0, 0.0], 0.0
 
@@ -46,7 +53,8 @@ class FakeBoard:
                 state = 2 if self.estop and self.fault["estop_wired"] else int(self.armed)
                 front = -1 if self.silent else 800
                 ms = round(self.t * 1000)
-                self.out += seal(f"T,{ms},{int(self.ticks[0])},{int(self.ticks[1])},{front},1500,{state}")
+                ticks = f"{int(self.ticks[0])},{int(self.ticks[1])}"
+                self.out += seal(f"T,{ms},{ticks},{front},1500,{state},{self.battery_mv}")
 
     def write(self, data):
         body = data.rstrip(b"\n")[:-5].decode()
@@ -89,6 +97,7 @@ def test_a_good_board_passes():
     said = []
     assert bench(FakeBoard(), said=said).run()
     assert said[-1] == "All checks passed."
+    assert any(s.startswith("PASS  battery reads 12.15 V") for s in said)
     rough = [float(s.split()[0]) for s in said if "counts per meter" in s]
     assert rough and all(r == pytest.approx(2000, rel=0.1) for r in rough)
 
@@ -101,6 +110,7 @@ def test_a_good_board_passes():
         ({"no_watchdog": True}, "do not drive it"),
         ({"estop_wired": False}, "does not see the emergency stop"),
         ({"silent_sensor": True}, "does not answer"),
+        ({"no_battery": True}, "battery is not reported"),
     ],
 )
 def test_finds_wiring_faults(fault, words):

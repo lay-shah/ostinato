@@ -2,8 +2,9 @@
 
 No board exists yet. `firmware/motor_guard.h` is the matching code for the board.
 Commands: `D,<seq>,<left mm/s>,<right mm/s>*<CRC>`.
-Reports: `T,<ms>,<left ticks>,<right ticks>,<front mm>,<rear mm>,<state>*<CRC>`.
-The state is 0 waiting for a stop, 1 ready, or 2 emergency stop pressed.
+Reports: `T,<ms>,<left ticks>,<right ticks>,<front mm>,<rear mm>,<state>,<battery mV>*<CRC>`.
+The state is 0 waiting for a stop, 1 ready, or 2 emergency stop pressed. Reports from
+before the battery was added, without it, are still read.
 """
 
 import binascii
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 MAX_WHEEL = 450  # mm/s, as on the board
 MAX_LINE = 80
 SILENT = -1  # a distance sensor that did not answer
+MAX_BATTERY = 60000  # mV; more is a damaged report
 
 
 def seal(body):
@@ -38,6 +40,7 @@ class Report:
     rear: float
     armed: bool
     estop: bool = False
+    battery: float = math.nan  # V, NaN when not reported
 
 
 def parse(line):
@@ -49,13 +52,23 @@ def parse(line):
         if seal(body)[:-1] != line:
             return None
         kind, *rest = body.split(",")
-        ms, left, right, front, rear, state = (int(v) for v in rest)
+        numbers = [int(v) for v in rest]
+        ms, left, right, front, rear, state, *battery = numbers
     except (UnicodeDecodeError, ValueError):
         return None
-    if kind != "T" or ms < 0 or min(front, rear) < SILENT or state not in (0, 1, 2):
+    if (
+        kind != "T"
+        or len(numbers) not in (6, 7)
+        or ms < 0
+        or min(front, rear) < SILENT
+        or state not in (0, 1, 2)
+    ):
+        return None
+    if battery and not 0 <= battery[0] <= MAX_BATTERY:
         return None
     front, rear = (math.nan if v == SILENT else v / 1000 for v in (front, rear))
-    return Report(ms, left, right, front, rear, state == 1, state == 2)
+    volts = battery[0] / 1000 if battery and battery[0] > 0 else math.nan
+    return Report(ms, left, right, front, rear, state == 1, state == 2, volts)
 
 
 class Board:

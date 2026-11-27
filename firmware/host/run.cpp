@@ -3,6 +3,7 @@
 //   <ms> E <0 or 1>        emergency stop released or pressed
 //   <ms> F <mm or -1>      front distance; R for rear; -1 means no answer
 //   <ms> L <0 or 1>        stall the left wheel
+//   <ms> V <mV>            battery voltage
 // Board output goes to stdout; every 50 ms, "<ms> <left mm/s> <right mm/s>" to stderr.
 #include <math.h>
 #include <stdlib.h>
@@ -16,6 +17,7 @@ uint32_t now_us = 0;
 int level[32], pwm[32];
 void (*isr[32])();
 int echo_us[32];
+int analog[32];
 const unsigned char *in;
 size_t in_left = 0;
 }  // namespace host
@@ -46,6 +48,7 @@ struct Motor {
 
 int main() {
   host::level[ESTOP] = HIGH;
+  host::analog[BATTERY] = (int)(12000 / BATTERY_MV_PER_COUNT);
   setup();
   Motor l{LEFT_PWM, LEFT_DIR, LEFT_A, LEFT_B, 1}, r{RIGHT_PWM, RIGHT_DIR, RIGHT_A, RIGHT_B, -1};
   std::vector<unsigned char> buffer;
@@ -80,6 +83,8 @@ int main() {
       host::echo_us[kind == 'F' ? FRONT_ECHO : REAR_ECHO] = mm < 0 ? 0 : mm * 2000 / 343;
     } else if (kind == 'L') {
       l.stalled = atoi(text) != 0;
+    } else if (kind == 'V') {
+      host::analog[BATTERY] = (int)(atoi(text) / BATTERY_MV_PER_COUNT + 0.5f);
     }
     until = (uint32_t)ms;
   }

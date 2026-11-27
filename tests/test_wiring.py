@@ -17,6 +17,7 @@ NAMES = {
     "REAR_TRIG": "Rear distance sensor trigger",
     "REAR_ECHO": "Rear distance sensor echo",
     "ESTOP": "Emergency stop pole 2",
+    "BATTERY": "Battery, through a divider",
 }
 
 

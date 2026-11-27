@@ -71,6 +71,12 @@ def test_holds_the_speed_asked_for(board):
     assert last.left * 0.5 / 1000 == pytest.approx(0.2 * 2.6, rel=0.1)
 
 
+def test_reports_the_battery(board):
+    reports, _ = board([*READY, (500, "V 11100"), (1000, "F 900")])
+    assert reports[0].battery == pytest.approx(12.0, abs=0.05)
+    assert reports[-1].battery == pytest.approx(11.1, abs=0.05)
+
+
 def test_stops_soon_after_commands_stop(board):
     reports, speeds = board([*READY, *commands(70, 2000, 250, 250), (3500, "F 900")])
     assert speeds[2000][0] > 200

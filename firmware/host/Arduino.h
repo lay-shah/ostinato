@@ -12,12 +12,14 @@
 #define INPUT_PULLUP 2
 #define RISING 3
 #define A0 14
+#define A1 15
 
 namespace host {
 extern uint32_t now_us;
 extern int level[32], pwm[32];
 extern void (*isr[32])();
 extern int echo_us[32];
+extern int analog[32];
 extern const unsigned char *in;
 extern size_t in_left;
 }  // namespace host
@@ -28,6 +30,7 @@ inline void pinMode(int, int) {}
 inline void digitalWrite(int pin, int v) { host::level[pin] = v; }
 inline int digitalRead(int pin) { return host::level[pin]; }
 inline void analogWrite(int pin, int v) { host::pwm[pin] = v; }
+inline int analogRead(int pin) { return host::analog[pin]; }
 inline int digitalPinToInterrupt(int pin) { return pin; }
 inline void attachInterrupt(int pin, void (*f)(), int) { host::isr[pin] = f; }
 inline void noInterrupts() {}
