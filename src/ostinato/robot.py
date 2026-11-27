@@ -46,6 +46,7 @@ CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
 MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
 LOOKS = 15  # sightings of the person before judging
 SEARCH_TURN = 0.4  # rad/s, turning in place to find a marker when unsure where it is
+STILL_LOOKS = 0.5  # s between looks for markers while stopped: nothing changes but the noise
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,19 @@ class Robot:
         self.drive = self.guard.allow(t, want)
         self.board.send(self.drive)
         return self.drive
+
+    def wants_markers(self, t):
+        """Whether to look for markers in this picture. Every picture while it may move;
+        twice a second while stopped, which saves time for measuring and keeps one view
+        of the same marker from counting as many."""
+        moving = self.moving or self.drive != STOP
+        if moving or self.mission.state in (State.DRIVING, State.FACING) or not self.localizer.good:
+            return True
+        last = getattr(self, "_looked", None)
+        if last is None or t - last >= STILL_LOOKS or t < last:
+            self._looked = t
+            return True
+        return False
 
     @property
     def wants_ask(self):
@@ -466,7 +480,7 @@ def main(argv=None):
             robot.step(
                 t,
                 link,
-                find_markers(gray, setup.camera),
+                find_markers(gray, setup.camera) if robot.wants_markers(t) else (),
                 reading,
                 bool(responded),
                 check.active,

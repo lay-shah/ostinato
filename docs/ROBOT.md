@@ -84,7 +84,7 @@ The setup file holds a person's measurements: where the rover starts, where the 
 
 ## Knowing where it is
 
-It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty and the markers are: it does not find people by itself.
+It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. It looks for markers in every picture while it may move, and twice a second while stopped. Stopped, nothing changes but the noise, and the time is better spent measuring. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty and the markers are: it does not find people by itself.
 
 ## Tested so far, in simulation only
 

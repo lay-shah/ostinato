@@ -12,7 +12,7 @@ from ostinato.breathing import Reading
 from ostinato.localize import Sighting
 from ostinato.motors import seal
 from ostinato.robot import Robot, Setup, main
-from ostinato.rover import KEEP_OUT, STOP, Pose, State, wrap
+from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, State, wrap
 
 ROOM = {
     "track": 0.27,
@@ -180,6 +180,19 @@ def test_waits_for_a_steady_picture(board_program, setup):
     robot.mission._go(0, State.SETTLING)
     robot.shaking = True
     assert robot.status().startswith("settling, waiting for the camera to stop shaking;")
+
+
+def test_looks_for_markers_less_while_stopped(board_program, setup):
+    robot, _, _ = drive(board_program, setup, 1)
+    assert robot.mission.state is State.MEASURING and robot.drive == STOP and robot.localizer.good
+    robot.moving, t = False, robot._t + 1
+    looks = [robot.wants_markers(t + k * 0.1) for k in range(12)]
+    assert looks == [True, False, False, False, False, True, False, False, False, False, True, False]
+    robot.drive = Drive(0.1, 0.0)  # about to move: every picture
+    assert all(robot.wants_markers(t + 2 + k * 0.01) for k in range(3))
+    robot.drive = STOP
+    robot.localizer.lost = True  # unsure where it is: every picture
+    assert all(robot.wants_markers(t + 3 + k * 0.01) for k in range(3))
 
 
 def test_measures_and_reports(board_program, setup):
