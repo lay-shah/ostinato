@@ -32,6 +32,7 @@ Battery ── fuse ── emergency stop (pole 1, normally closed) ── motor
 | 12 | Rear distance sensor trigger | |
 | 13 | Rear distance sensor echo | see below for 3.3 V boards |
 | A0 | Emergency stop pole 2, to ground | uses the internal pull-up |
+| A1 | Battery, through a divider | see below |
 | GND | Logic ground | one point only |
 | USB | Computer | commands and reports, 115200 baud |
 
@@ -39,9 +40,11 @@ With four wheels, wire the two motors on each side together as one, and put the 
 
 The HC-SR04 sends a 5 V echo. On a board with 3.3 V pins, put a divider on each echo line, 1 kΩ from the sensor and 2 kΩ to ground, or the pin may be damaged.
 
+The battery goes to A1 through a divider: 10 kΩ from the battery's positive side after its fuse, and 3.3 kΩ from A1 to ground. On a 5 V board that reads batteries up to 20 V. On a 3.3 V board, or above 20 V, choose resistors that keep A1 below the board's own voltage at full charge, and change `BATTERY_MV_PER_COUNT` to match. Put `battery_low` in the setup file so the rover stops before the battery is flat.
+
 ## Before the first drive
 
 1. Check every connection with the motor power off.
 2. With the emergency stop pressed, power up. The wheels must not move.
-3. Put the rover on a stand with its wheels off the ground, and run `python -m ostinato.bench --port …`. Fix everything it reports.
+3. Put the rover on a stand with its wheels off the ground, and run `python -m ostinato.bench --port …`. Fix everything it reports. Check the battery voltage it prints against a meter.
 4. Run `python -m ostinato.bench --port … --measure` on the floor to find counts per meter. Put that in the setup file, and set `MM_PER_TICK` in the board program to 1000 divided by it.

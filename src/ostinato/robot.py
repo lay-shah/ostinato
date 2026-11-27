@@ -18,6 +18,9 @@ Each marker is [x, y, facing]: where it is, and the direction its printed side f
 The facing may be left out, as [x, y], but then the check cannot tell whether a marker is
 turned too far from a view to be read.
 
+"battery_low", in volts, is optional but wise: below it the rover holds its wheels and
+asks for a person. About 3.5 V a cell for a lithium battery, so 10.5 for three cells.
+
 "start" is where the rover is placed and which way it faces. "views" are directions
 around the person, from the person, to measure from in order. Check a file with
 `python -m ostinato.robot --setup room.json --check` before driving. "height" is the lens's
@@ -47,6 +50,7 @@ MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kep
 LOOKS = 15  # sightings of the person before judging
 SEARCH_TURN = 0.4  # rad/s, turning in place to find a marker when unsure where it is
 MIN_FPS = 10  # pictures a second; as `python -m ostinato.speed` aims for
+BATTERY_WINDOW = 2.0  # s of battery reports judged together, so a sag when starting off passes
 STILL_LOOKS = 0.5  # s between looks for markers while stopped: nothing changes but the noise
 
 
@@ -61,6 +65,7 @@ class Setup:
     camera: Camera = field(default_factory=Camera)
     lens_height: float | None = None  # m above the floor
     facings: dict[int, float] = field(default_factory=dict)  # radians, where given
+    battery_low: float | None = None  # V; below this the rover holds its wheels
 
     @classmethod
     def load(cls, path):
@@ -89,6 +94,7 @@ class Setup:
                 camera,
                 lens_height,
                 {int(k): math.radians(float(p[2])) for k, p in raw["markers"].items() if len(p) == 3},
+                None if raw.get("battery_low") is None else float(raw["battery_low"]),
             )
             sizes = [len(p) for p in raw["markers"].values()]
         except (OSError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
@@ -101,6 +107,8 @@ class Setup:
             raise ValueError("setup file: check track, ticks_per_meter, and person")
         if not setup.views or not setup.markers or any(n not in (2, 3) for n in sizes):
             raise ValueError("setup file: needs views and at least one marker at [x, y, facing]")
+        if setup.battery_low is not None and not 3 <= setup.battery_low <= 50:
+            raise ValueError("setup file: battery_low must be 3 to 50 V")
         if setup.lens_height is not None and not 0.2 <= setup.lens_height <= 2:
             raise ValueError("setup file: camera height must be 0.2 to 2 m")
         if not 0 < setup.camera.fov < 170 or abs(setup.camera.pitch) > 60:
@@ -151,6 +159,8 @@ def check_setup(setup):
             )
         else:
             errors.append(f"view {i} sees no marker: put one beyond the person, as seen from there")
+    if setup.battery_low is None:
+        warnings.append("no battery_low: it will not stop for a flat battery")
     unknown = sorted(set(setup.markers) - set(setup.facings))
     if unknown:
         warnings.append(
@@ -185,6 +195,8 @@ class Robot:
         self.seen_person = deque(maxlen=LOOKS)
         self.confirmed = 0  # sightings of the person in place at this viewpoint
         self.person_problem = None
+        self.battery_problem = None
+        self.battery = deque()  # (t, volts) from the last BATTERY_WINDOW seconds
         self.searched = 0.0  # radians turned looking for a marker since it was last sure
         self.seen = []  # markers believed in the last step
 
@@ -206,6 +218,7 @@ class Robot:
             self.guard.link(t)
         for report in self.board.receive(t, self.guard):
             last, self._last = self._last, report
+            self._check_battery(t, report.battery)
             if last is None:
                 continue
             if report.ms < last.ms:
@@ -241,7 +254,7 @@ class Robot:
                 want = Drive(0.0, SEARCH_TURN)
             else:
                 want = STOP
-        if self.person_problem:
+        if self.person_problem or self.battery_problem:
             want = STOP  # the 1 m kept from them may be measured from the wrong place
         self._t = t
         self.drive = self.guard.allow(t, want)
@@ -277,6 +290,17 @@ class Robot:
         """Whether to start the spoken request for a raised hand now."""
         a = self.mission.assessor
         return a is not None and a.wants_ask and self.mission.state is State.MEASURING
+
+    def _check_battery(self, t, volts):
+        if self.setup.battery_low is None or not math.isfinite(volts):
+            return
+        self.battery.append((t, volts))
+        while self.battery[0][0] < t - BATTERY_WINDOW:
+            self.battery.popleft()
+        if t - self.battery[0][0] >= 0.75 * BATTERY_WINDOW:
+            typical = float(np.median([v for _, v in self.battery]))
+            if typical < self.setup.battery_low and not self.battery_problem:
+                self.battery_problem = f"the battery is low ({typical:.1f} V)"
 
     def _check_person(self, chest):
         if chest is None or self.setup.lens_height is None or not self.localizer.good or self.moving:
@@ -319,14 +343,15 @@ class Robot:
             "rear": None if report is None or report.rear != report.rear else report.rear,
             "shaking": self.shaking,
             "fps": None if self.fps is None else round(self.fps, 1),
-            "problem": self.person_problem,
+            "battery": None if not self.battery else round(self.battery[-1][1], 2),
+            "problem": self.person_problem or self.battery_problem,
             "outcome": self.mission.outcome,
         }
 
     def status(self):
         place, _ = self.localizer.uncertainty
-        if self.person_problem:
-            return f"stopped: {self.person_problem}; a person must check"
+        if self.person_problem or self.battery_problem:
+            return f"stopped: {self.person_problem or self.battery_problem}; a person must check"
         where = "lost: place it again" if self.localizer.lost else f"position within {100 * place:.0f} cm"
         if not (self.localizer.good or self.localizer.lost):
             where += ", looking for a marker" if self.searched < 2 * math.pi else ", no marker found"

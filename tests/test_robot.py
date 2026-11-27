@@ -44,6 +44,7 @@ class Hardware:
         self.ticks, self.waiting, self.sent = [0.0, 0.0], b"", []
         self.restart_at = None
         self.ms0 = 0
+        self.battery = lambda t: 12.0  # V
 
     # The port that Robot uses
     def write(self, data):
@@ -74,7 +75,8 @@ class Hardware:
         a = p.heading + turn / 2
         self.pose = Pose(p.x + middle * math.cos(a), p.y + middle * math.sin(a), wrap(p.heading + turn))
         state = 2 if estop else armed
-        line = seal(f"T,{ms - self.ms0},{int(self.ticks[0])},{int(self.ticks[1])},3000,3000,{state}")
+        mv = round(self.battery(t) * 1000)
+        line = seal(f"T,{ms - self.ms0},{int(self.ticks[0])},{int(self.ticks[1])},3000,3000,{state},{mv}")
         if not cut and self.chance.random() >= self.loss:
             self.waiting += line
         return left or right
@@ -112,6 +114,7 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
     """Returns the robot, the nearest it came to the person, and how often the wheels
     turned when they should not have."""
     hw = Hardware(program, setup, seed, trouble.pop("loss", 0.0))
+    hw.battery = trouble.get("battery", hw.battery)
     robot, dt, nearest, wrong = Robot(setup, hw, ask=trouble.get("ask", False)), 0.05, math.inf, 0
     cut, estop, restart = trouble.get("cut"), trouble.get("estop"), trouble.get("restart")
     asks = robot.asks = []  # times the robot asked for a raised hand
@@ -194,6 +197,24 @@ def test_looks_for_markers_less_while_stopped(board_program, setup):
     robot.drive = STOP
     robot.localizer.lost = True  # unsure where it is: every picture
     assert all(robot.wants_markers(t + 3 + k * 0.01) for k in range(3))
+
+
+def test_stops_for_a_flat_battery_but_not_a_brief_sag(board_program, setup):
+    low = Setup(**{**setup.__dict__, "battery_low": 10.5})
+    # A sag while starting off: under 1 s below the limit.
+    robot, _, _ = drive(board_program, low, 1, battery=lambda t: 9.8 if 3 < t < 3.8 else 12.0)
+    assert robot.mission.state is State.MEASURING and robot.battery_problem is None
+    # Flat from 4 s, while driving.
+    robot, _, _ = drive(
+        board_program, low, 1, until=State.DONE, seconds=40, battery=lambda t: 10.2 if t > 4 else 12
+    )
+    assert robot.battery_problem == "the battery is low (10.2 V)"
+    assert robot.status() == "stopped: the battery is low (10.2 V); a person must check"
+    assert "measuring" not in [state for _, state, _ in robot.mission.log]  # it never got there
+    assert robot.drive == STOP and robot.record(40)["problem"] == "the battery is low (10.2 V)"
+    # Without battery_low it carries on, but the check warns.
+    robot, _, _ = drive(board_program, setup, 1, battery=lambda t: 9.0)
+    assert robot.mission.state is State.MEASURING and robot.battery_problem is None
 
 
 def test_measures_and_reports(board_program, setup):
@@ -439,7 +460,9 @@ def test_setup_check(tmp_path):
     from ostinato.robot import check_setup
 
     errors, warnings = check_setup(setup_with(tmp_path))
-    assert errors == [] and all("only marker" in w or "without a facing" in w for w in warnings)
+    assert errors == [] and all(
+        "only marker" in w or "without a facing" in w or "no battery_low" in w for w in warnings
+    )
     assert any("markers 1, 2, 3, 4 without a facing" in w for w in warnings)
     errors, _ = check_setup(setup_with(tmp_path, start=[0.8, 0, 0]))
     assert any("start is 0.80 m" in e for e in errors)

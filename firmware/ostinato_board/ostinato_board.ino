@@ -20,10 +20,14 @@ const int LEFT_PWM = 5, LEFT_DIR = 4, RIGHT_PWM = 6, RIGHT_DIR = 7;
 const int LEFT_A = 2, LEFT_B = 8, RIGHT_A = 3, RIGHT_B = 9;  // A pins must take interrupts
 const int FRONT_TRIG = 10, FRONT_ECHO = 11, REAR_TRIG = 12, REAR_ECHO = 13;
 const int ESTOP = A0;  // normally closed switch to ground: pressed or unplugged reads HIGH
+const int BATTERY = A1;  // through a divider; see docs/WIRING.md
 
 // CHECK: from the encoder's counts per turn and the wheel's size
 const float MM_PER_TICK = 0.5f;
 const uint32_t STEP_MS = 50;  // control and report period
+// CHECK: battery mV for each count of analogRead. A 10k over 3.3k divider on a 5 V board:
+// 5000 / 1023 * (10 + 3.3) / 3.3 = 19.7, for up to 20 V. Measure with a meter and adjust.
+const float BATTERY_MV_PER_COUNT = 19.7f;
 
 ostinato::MotorGuard guard;
 ostinato::Wheel left(MM_PER_TICK), right(MM_PER_TICK);
@@ -102,7 +106,9 @@ void loop() {
   readFront = !readFront;
   char line[64];
   int state = pressed ? 2 : guard.armed() ? 1 : 0;
-  int n = snprintf(line, sizeof line, "T,%lu,%ld,%ld,%d,%d,%d", (unsigned long)now, l, r, front, rear, state);
+  int battery = (int)(analogRead(BATTERY) * BATTERY_MV_PER_COUNT + 0.5f);  // mV
+  int n = snprintf(line, sizeof line, "T,%lu,%ld,%ld,%d,%d,%d,%d", (unsigned long)now, l, r, front, rear, state,
+                   battery);
   if (n > 0 && n < (int)sizeof line) {
     char end[8];
     snprintf(end, sizeof end, "*%04X\n", ostinato::crc16(line, (size_t)n));
