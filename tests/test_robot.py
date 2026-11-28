@@ -324,7 +324,8 @@ def test_stops_when_the_person_is_elsewhere(board_program, mast, really):
     robot, _, _ = drive(board_program, mast, 1, until=State.DONE, seconds=120, really=really, breathing=False)
     assert robot.person_problem and robot.drive == STOP
     # It never reached the second view: the wheels stayed still once it doubted.
-    assert [state for _, state, view in robot.mission.log if view == 1] in ([], ["driving", "done"])
+    states = [state for _, state, view in robot.mission.log if view == 1]
+    assert states in ([], ["driving", "done"], ["driving", "going round the other way", "done"])
     assert "setup file says" in robot.status()
 
 

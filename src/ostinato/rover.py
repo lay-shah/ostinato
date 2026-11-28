@@ -182,13 +182,15 @@ def as_body(person):
     return person if isinstance(person, Body) else Body(tuple(person))
 
 
-def ring_path(pose, person, bearing):
+def ring_path(pose, person, bearing, long_way=False):
     """Points around the person to the viewpoint at `bearing`, never cutting across.
-    `person` is a Body, or (x, y) for a point."""
+    `person` is a Body, or (x, y) for a point. The shorter way round, unless `long_way`."""
     body = as_body(person)
     cx, cy = body.chest
     here = math.atan2(pose.y - cy, pose.x - cx)
     sweep = wrap(bearing - here)
+    if long_way and abs(sweep) > 1e-6:
+        sweep -= math.copysign(2 * math.pi, sweep)
     # Points about 0.33 m apart along the line (15 degrees for a point person), the far
     # ends of a body being up to FEET further out.
     reach = RING + (0.0 if body.head is None else max(HEAD, FEET))
@@ -225,6 +227,7 @@ class Mission:
         self.person = self.body.chest
         self.view = 0
         self._path = None
+        self._long_way = False  # this leg was blocked once, and goes round the other way
         self._since = self._progress = None
 
     @property
@@ -256,12 +259,12 @@ class Mission:
         if self.assessor is None:
             # Nothing has been measured yet, so there is no assessment to consult.
             if self.view + 1 < len(self.bearings):
-                self.view, self._path = self.view + 1, None
+                self.view, self._path, self._long_way = self.view + 1, None, False
                 return self._go(t, State.DRIVING)
             return self._go(t, State.DONE)
         decision = self.assessor.move_failed(t) if failed else self.assessor.decision
         if decision.action is Action.MOVE and self.view + 1 < len(self.bearings):
-            self.view, self._path = self.view + 1, None
+            self.view, self._path, self._long_way = self.view + 1, None, False
             return self._go(t, State.DRIVING)
         return self._go(t, State.DONE)
 
@@ -311,6 +314,12 @@ class Mission:
             self._progress = t
         if moving:
             self._progress = t
+        if t - self._progress > BLOCKED and not self._long_way:
+            # Blocked: try once round the other side of the person before giving up.
+            self._long_way = True
+            self._path = ring_path(pose, self.body, self.bearings[self.view], long_way=True)
+            self._progress = self._since = t
+            self.log.append((t, "going round the other way", self.view))
         if t - self._progress > BLOCKED or t - self._since > LEG:
             self._next(t, failed=True)
             return STOP
