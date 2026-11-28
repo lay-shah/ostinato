@@ -8,7 +8,7 @@ import math
 
 from PIL import Image, ImageDraw
 
-from .rover import KEEP_OUT, RING, plan
+from .rover import KEEP_OUT, RING, TRAVEL, plan
 from .ui import AMBER, BG, BLUE, CARD, DIM, GREEN, INK, LINE, font
 
 SIZE = 900  # px, the map's width
@@ -23,7 +23,7 @@ def bounds(setup):
         xs.append(x)
         ys.append(y)
     for a in range(0, 360, 10):  # the whole way round, as the route may take it
-        x, y = setup.body.around(math.radians(a), RING)
+        x, y = setup.body.around(math.radians(a), TRAVEL)
         xs.append(x)
         ys.append(y)
     for x, y, r in setup.obstacles:
@@ -60,7 +60,7 @@ def draw(setup, problems=(), notes=()):
     for x, y, r in setup.obstacles:
         (x0, y0), (x1, y1) = at(x - r, y + r), at(x + r, y - r)
         d.ellipse((x0, y0, x1, y1), fill=GREY)
-    outline(RING, fill=LINE, width=1)
+    outline(TRAVEL, fill=LINE, width=1)
     outline(KEEP_OUT, fill=AMBER, width=2)
 
     # The person: a line from head to feet, or a dot when it is not known how they lie.
