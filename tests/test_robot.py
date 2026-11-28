@@ -483,6 +483,9 @@ def test_setup_check(tmp_path):
     assert [e for e in errors if "sees no marker" in e] and len(errors) == 2
     errors, _ = check_setup(setup_with(tmp_path, markers={**ROOM["markers"], "5": [1.3, 0]}))
     assert any("marker 5 is on the rover's path" in e for e in errors)
+    # Or on the wider way round between views.
+    errors, _ = check_setup(setup_with(tmp_path, markers={**ROOM["markers"], "5": [0, 1.55]}))
+    assert any("marker 5 is on the rover's path" in e for e in errors)
     _, warnings = check_setup(setup_with(tmp_path, views=[30, 40]))
     assert any("within 20 degrees" in w for w in warnings)
     # A marker too small in the picture does not count.

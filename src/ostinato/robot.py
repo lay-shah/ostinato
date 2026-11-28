@@ -56,6 +56,7 @@ from .rover import (
     KEEP_OUT,
     RING,
     STOP,
+    TRAVEL,
     Body,
     Drive,
     Guard,
@@ -269,7 +270,8 @@ def check_setup(setup):
         if abs(wrap(a - b)) < math.radians(20):
             warnings.append("two views are within 20 degrees of each other and see much the same")
     for n, (mx, my) in setup.markers.items():
-        ring = abs(body.distance(mx, my) - RING)
+        # Near the way round, or near where it comes in to a view.
+        ring = min(abs(body.distance(mx, my) - RING), abs(body.distance(mx, my) - TRAVEL))
         if ring < 0.35:
             errors.append(f"marker {n} is on the rover's path around the person; move it")
         elif body.distance(mx, my) < KEEP_OUT:

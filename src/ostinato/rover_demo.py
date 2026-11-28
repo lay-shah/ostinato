@@ -20,7 +20,7 @@ from .demo import Demo
 from .localize import Sighting
 from .motors import seal
 from .robot import Robot, Setup
-from .rover import FEET, HEAD, KEEP_OUT, RING, STOP, Drive, Pose, SimulatedBase, State, wrap
+from .rover import FEET, HEAD, KEEP_OUT, RING, STOP, TRAVEL, Drive, Pose, SimulatedBase, State, wrap
 from .shake import Steadiness
 from .ui import AMBER, BG, BLUE, CARD, DIM, GREEN, INK, LINE, font
 
@@ -30,7 +30,7 @@ MAP = (564, 100, 1056, 592)
 SCALE = 82.0  # map pixels per meter
 DT = 1 / 15
 BEARINGS = [0.5, 2.6, -2.7]  # beside the person, not at the head or feet
-MARKERS = {1: (0.0, 2.4), 2: (2.6, 0.0), 3: (0.0, -2.4), 4: (-2.6, 0.0)}
+MARKERS = {1: (0.0, 3.0), 2: (2.6, 0.0), 3: (0.0, -3.3), 4: (-2.6, 0.0)}  # clear of the way round
 TRACK = 0.27
 TICKS = 2000  # per meter
 ASK_SECONDS = 10.0
@@ -236,7 +236,7 @@ class RoverDemo:
     def _map(self, d):
         d.rounded_rectangle(MAP, 12, fill=CARD, outline=LINE)
         self._around(d, KEEP_OUT, fill=AMBER, width=2)
-        self._around(d, RING, fill=LINE, width=1)
+        self._around(d, TRAVEL, fill=LINE, width=1)  # the way round; views come in to RING
         # Drawn to the size the rover allows for: HEAD above the chest, FEET below.
         x, y = self._at(0, 0)
         top, bottom, r = y - HEAD * SCALE, y + FEET * SCALE, 0.12 * SCALE
