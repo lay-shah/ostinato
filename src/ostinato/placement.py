@@ -8,6 +8,8 @@ import argparse
 import math
 from dataclasses import dataclass
 
+from .rover import RING
+
 CHEST_HEIGHT = 0.2  # meters above the ground, lying down
 SHOULDERS, TORSO = 0.38, 0.5  # meters between the shoulders, and shoulders to hips
 RISE = 0.005  # meters, peak to peak; assumed for quiet breathing
@@ -61,13 +63,17 @@ def main(argv=None):
     if not (0 < args.fov < 170 and args.width > 0 and args.rise_mm > 0):
         parser.error("field of view must be between 0 and 170, and the others above 0")
     print(f"Assumes a {args.rise_mm:g} mm chest rise, {args.fov:g} degrees across, {args.width} pixels wide.")
-    print("Calculated, not measured. Nobody has been tested.\n")
+    print("Calculated, not measured. Nobody has been tested.")
+    print(f"The rover measures from {RING} m beside the chest; the trial's lying-down views do too.\n")
     print(f"{'lens height':>11} {'distance':>9} {'angle':>6} {'motion':>8}  verdict")
     for height in (0.4, 0.6, 0.8, 1.0, 1.2):
         for distance in (0.8, 1.0, 1.25, 1.5, 2.0):
             v = view(height, distance, args.fov, args.width, args.rise_mm / 1000)
             verdict = v.problem or "worth trying"
-            print(f"{height:>9.1f} m {distance:>7.2f} m {v.elevation:>5.0f}° {v.pixels:>5.1f} px  {verdict}")
+            rover = "  <- where the rover stands" if distance == RING else ""
+            print(
+                f"{height:>9.1f} m {distance:>7.2f} m {v.elevation:>5.0f}° {v.pixels:>5.1f} px  {verdict}{rover}"
+            )
 
 
 if __name__ == "__main__":

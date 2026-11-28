@@ -19,6 +19,8 @@ def test_placement_table_says_it_is_calculated(capsys):
     placement.main([])
     out = capsys.readouterr().out
     assert "Calculated, not measured" in out and "worth trying" in out
+    rover = [line for line in out.splitlines() if "where the rover stands" in line]
+    assert len(rover) == 5 and all(" 1.25 m " in line for line in rover)
     with pytest.raises(SystemExit):
         placement.main(["--fov", "0"])
 
