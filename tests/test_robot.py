@@ -539,7 +539,9 @@ def test_the_example_room_is_complete_and_passes(capsys):
     assert set(setup.facings) == set(setup.markers) and setup.lens_height == 0.8
     assert check_setup(setup) == ([], [])
     main(["--setup", str(path), "--check"])
-    assert "No problems found." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "No problems found." in out
+    assert "start reads marker 3\nview 1 reads markers 1, 2\nview 2 reads markers 3, 4" in out
 
 
 def test_setup_knows_how_the_person_lies(tmp_path):

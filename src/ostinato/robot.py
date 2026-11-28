@@ -20,6 +20,7 @@ import numpy as np
 from .localize import Localizer, find_markers, ground, place
 from .motors import Board
 from .rover import (
+    RING,
     STOP,
     Drive,
     Guard,
@@ -508,6 +509,23 @@ def main(argv=None):
                 print(f"Map saved to {args.map}")
         except (OSError, ValueError) as error:
             parser.exit(1, f"{error}\n")
+        from .setup_file import visible_markers
+
+        start = setup.start
+        places = [("start", start.x, start.y, start.heading + math.radians(setup.camera.pan))]
+        for i, bearing in enumerate(setup.views, 1):
+            x, y = setup.body.around(bearing, RING)
+            places.append((f"view {i}", x, y, math.atan2(setup.person[1] - y, setup.person[0] - x)))
+        for name, x, y, facing in places:
+            seen = sorted(visible_markers(setup, x, y, facing))
+            print(
+                f"{name} reads "
+                + (
+                    f"marker{'s' if len(seen) > 1 else ''} {', '.join(map(str, seen))}"
+                    if seen
+                    else "no marker"
+                )
+            )
         for line in errors:
             print(f"Problem: {line}")
         for line in warnings:
