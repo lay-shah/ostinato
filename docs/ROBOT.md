@@ -95,6 +95,7 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 
 - Against the compiled board code, 300 of 300 drives reached the first viewpoint, including with 30% of messages lost or damaged, and none came nearer than 1.2 m. Hiding markers beyond 4 m changed nothing in 120 more drives.
 - Everything at once, in the example room with the person lying down and furniture on the short way to view 1: 8 of 8 drives measured at both views, with and without 20% of messages lost, never nearer than 1.26 m to the person or 1.17 m to the furniture. This found two problems, now fixed: going round at 1.25 m, the guard's margin for uncertainty held the rover still near the feet, so it now goes round at 1.5 m and comes in to 1.25 m at each view; the long way round needed more than the 90 s a leg was allowed; and going round clockwise, the camera faced the walls, so it now drives that way backwards.
+- Reversing round clockwise into a box the setup file does not list, the rear sensor stopped it, and it went the other way forwards: 3 of 3 drives, at least 0.3 m short of the box.
 - With a box on the short way round to a viewpoint, it stopped for it, turned back, and reached the view the other way round, in 5 of 5 drives. It tries the other way once per view, then moves on.
 - With no marker in sight, it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again.
 - The person check caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
