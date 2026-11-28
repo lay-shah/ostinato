@@ -438,7 +438,7 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
             off = math.degrees(wrap(s.bearing - bearing))
             lines.append(
                 f"marker {n}: {s.distance:.2f} m, expected {expected}; "
-                f"{100 * (s.distance - distance) / distance:+.0f}% and {off:+.0f} degrees off"
+                f"{round(100 * (s.distance - distance) / distance):+d}% and {round(off):+d} degrees off"
             )
         elif abs(across) < math.degrees(half):
             lines.append(f"marker {n}: not seen, expected at {expected}")
@@ -465,7 +465,7 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
                     (sx, sy), (hx, hy) = (place(pose, e) for e in ends)
                     lies = math.atan2(sy - hy, sx - hx)
                     turn = math.degrees(wrap(lies - setup.head))
-                    lines.append(f"lying: {turn:+.0f} degrees from the file")
+                    lines.append(f"lying: {round(turn):+d} degrees from the file")
     return lines
 
 
