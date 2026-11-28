@@ -604,6 +604,9 @@ def test_setup_check_knows_the_furniture(tmp_path):
         return check_setup(Setup.load(path))
 
     assert check([]) == ([], [])
+    # Facing away from every marker at the start.
+    _, warnings = check([], start=[2.4, 0.3, 0])
+    assert any("sees no marker from the start" in w for w in warnings)
     # A sofa between view 1 and both its markers hides them.
     errors, _ = check([[-1.6, -0.33, 0.7]])
     assert any("view 1 sees no marker" in e for e in errors)

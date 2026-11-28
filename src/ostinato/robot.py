@@ -183,16 +183,25 @@ def check_setup(setup):
             return 0.0
         return min(sees, TURNED_RANGE) if turn > TURNED else sees
 
-    for i, bearing in enumerate(setup.views, 1):
-        x, y = body.around(bearing, RING)
-        facing = math.atan2(py - y, px - x)  # the camera's direction there
-        seen = [
+    def visible(x, y, facing):
+        """Markers the camera reads from (x, y), looking toward `facing`."""
+        return [
             n
             for n, (mx, my) in setup.markers.items()
             if 0.5 < math.dist((x, y), (mx, my)) < reach(n, x, y)
             and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
             and clearance([(x, y), (mx, my)], setup.obstacles) > 0  # not hidden behind one
         ]
+
+    start = setup.start
+    if not visible(start.x, start.y, start.heading + math.radians(setup.camera.pan)):
+        warnings.append(
+            "the camera sees no marker from the start, so the first leg runs on the wheels alone "
+            "and it may stop to turn and look for one"
+        )
+    for i, bearing in enumerate(setup.views, 1):
+        x, y = body.around(bearing, RING)
+        seen = visible(x, y, math.atan2(py - y, px - x))  # the camera faces the chest there
         if seen:
             warnings += (
                 [] if len(seen) > 1 else [f"view {i} sees only marker {seen[0]}; two make a better fix"]
