@@ -485,7 +485,9 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
                 f"{round(100 * (s.distance - distance) / distance):+d}% and {round(off):+d} degrees off"
             )
         elif abs(across) < math.degrees(half):
-            lines.append(f"marker {n}: not seen, expected at {expected}")
+            hidden = clearance([(pose.x, pose.y), (mx, my)], setup.obstacles) <= 0
+            why = "hidden behind furniture in the setup file" if hidden else f"expected at {expected}"
+            lines.append(f"marker {n}: not seen, {why}")
     for n in sorted(set(seen) - set(setup.markers)):
         lines.append(f"marker {n}: seen, but not in the setup file")
     if setup.lens_height is None:

@@ -672,6 +672,9 @@ def test_rehearsal_compares_the_picture_with_the_file(tmp_path):
         any(line.startswith("marker 1: not seen, expected at") for line in lines)
         and "person: not seen" in lines
     )
+    sofa = Setup(**{**setup.__dict__, "obstacles": [(-1.6, -0.33, 0.7)]})
+    hidden = rehearsal(sofa, pose, [])
+    assert any(line.startswith("marker 1: not seen, hidden behind furniture") for line in hidden)
     far = rehearsal(setup, pose, [], pixel_of(setup, pose, 0.5, 0.0))
     assert any("more than 0.25 m, so the rover would stop" in line for line in far)
     with pytest.raises(ValueError):
