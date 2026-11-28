@@ -646,6 +646,7 @@ def main(argv=None):
     parser.add_argument("--setup", type=Path, required=True)
     parser.add_argument("--port", help="the motor board's serial port")
     parser.add_argument("--check", action="store_true", help="only check the setup file")
+    parser.add_argument("--map", type=Path, help="with --check: also draw the room from above, to a new PNG")
     parser.add_argument(
         "--log", type=Path, help="save positions and decisions, twice a second, without pictures"
     )
@@ -668,10 +669,19 @@ def main(argv=None):
         except (OSError, ValueError) as error:
             parser.exit(1, f"{error}\n")
         return
+    if args.map and not args.check:
+        parser.error("--map goes with --check")
     if args.check:
         try:
-            errors, warnings = check_setup(Setup.load(args.setup))
-        except ValueError as error:
+            setup = Setup.load(args.setup)
+            errors, warnings = check_setup(setup)
+            if args.map:
+                from .room_map import draw
+
+                with args.map.open("xb") as picture:  # never over an existing file
+                    draw(setup, errors, warnings).save(picture, "PNG")
+                print(f"Map saved to {args.map}")
+        except (OSError, ValueError) as error:
             parser.exit(1, f"{error}\n")
         for line in errors:
             print(f"Problem: {line}")
