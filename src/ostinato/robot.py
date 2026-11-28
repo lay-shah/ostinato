@@ -561,14 +561,16 @@ def rehearse(setup, view, camera, finder, clock=time.monotonic, show=None):
             return
 
 
-def summarize(path, setup):
-    """A few lines about a saved run."""
+def summarize(path, setup, raw=None):
+    """A few lines about a saved run. `raw` is the setup file's contents, to compare with
+    the one the log was made with."""
     rows = []
     for n, line in enumerate(Path(path).read_text().splitlines(), 1):
         try:
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             raise ValueError(f"line {n} of the log is damaged") from None
+    made_with = rows.pop(0)["setup"] if rows and "setup" in rows[0] else None  # older logs have none
     if not rows:
         raise ValueError("the log is empty")
     path_m = sum(math.dist((a["x"], a["y"]), (b["x"], b["y"])) for a, b in pairwise(rows))
@@ -577,7 +579,12 @@ def summarize(path, setup):
     for r in rows:
         if r["guard"] not in ("ok", "starting"):
             stops[r["guard"]] = stops.get(r["guard"], 0) + 1
-    lines = [
+    lines = (
+        []
+        if made_with is None or raw is None or made_with == raw
+        else ["Note: this log was made with a different setup file, so distances may be wrong."]
+    )
+    lines += [
         f"{rows[-1]['t'] - rows[0]['t']:.0f} s, about {path_m:.1f} m driven, by its own estimate.",
         f"Nearest to the person, allowing for its uncertainty: {nearest:.2f} m.",
         f"Ended {rows[-1]['state']}: {rows[-1]['outcome']}.",
@@ -664,7 +671,7 @@ def main(argv=None):
 
     if args.replay:
         try:
-            print(summarize(args.replay, Setup.load(args.setup)))
+            print(summarize(args.replay, Setup.load(args.setup), json.loads(args.setup.read_text())))
         except (OSError, ValueError) as error:
             parser.exit(1, f"{error}\n")
         return
@@ -722,6 +729,9 @@ def main(argv=None):
         if args.key:
             listener = Listener(load_key(args.key))
         port = SerialPort(args.port)
+        if log:
+            # First, what the run was set up with, so a replay can tell if it differs.
+            log.write(json.dumps({"setup": json.loads(args.setup.read_text())}) + "\n")
     except (OSError, ValueError) as error:
         if listener:
             listener.close()

@@ -737,7 +737,8 @@ def test_check_command(tmp_path, capsys):
 def test_run_log(program, tmp_path, capsys):
     log = tmp_path / "logs" / "run.jsonl"
     program(Camera(40, each=lambda n: time.sleep(0.03)), keys=[ord("g")], extra=["--log", str(log)])
-    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    header, *rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert header == {"setup": ROOM}  # what it was set up with comes first
     assert (
         len(rows) >= 2
         and {"x", "y", "within", "guard", "state", "markers", "shaking", "outcome"} <= rows[0].keys()
@@ -749,6 +750,11 @@ def test_run_log(program, tmp_path, capsys):
     main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])
     out = capsys.readouterr().out
     assert "driven" in out and "Nearest to the person" in out and "Ended driving" in out
+    assert "different setup file" not in out
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps({**ROOM, "person": [0.5, 0]}))
+    main(["--setup", str(other), "--replay", str(log)])
+    assert capsys.readouterr().out.startswith("Note: this log was made with a different setup file")
     # A log is never overwritten.
     with pytest.raises(SystemExit):
         program(Camera(5), extra=["--log", str(log)])
