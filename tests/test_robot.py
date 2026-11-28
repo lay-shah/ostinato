@@ -13,7 +13,7 @@ from ostinato.breathing import Reading
 from ostinato.localize import Sighting
 from ostinato.motors import seal
 from ostinato.robot import LOOKS, Robot, Setup, check_setup, main
-from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, State, clearance, wrap
+from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, SimulatedBase, State, clearance, wrap
 
 ROOM = {
     "track": 0.27,
@@ -45,6 +45,7 @@ class Hardware:
         self.restart_at = None
         self.ms0 = 0
         self.battery = lambda t: 12.0  # V
+        self.boxes = []  # (x, y, radius) the rover's sensors see, whether or not the setup file lists them
 
     # The port that Robot uses
     def write(self, data):
@@ -76,7 +77,10 @@ class Hardware:
         self.pose = Pose(p.x + middle * math.cos(a), p.y + middle * math.sin(a), wrap(p.heading + turn))
         state = 2 if estop else armed
         mv = round(self.battery(t) * 1000)
-        line = seal(f"T,{ms - self.ms0},{int(self.ticks[0])},{int(self.ticks[1])},3000,3000,{state},{mv}")
+        front, rear = (round(1000 * min(3.0, v)) for v in self.ranges())
+        line = seal(
+            f"T,{ms - self.ms0},{int(self.ticks[0])},{int(self.ticks[1])},{front},{rear},{state},{mv}"
+        )
         if not cut and self.chance.random() >= self.loss:
             self.waiting += line
         return left or right
@@ -89,6 +93,10 @@ class Hardware:
                 distance = math.dist((x, y), (self.pose.x, self.pose.y)) * (1 + self.rng.normal(0, 0.02))
                 found.append(Sighting(number, distance, bearing + self.rng.normal(0, 0.01)))
         return found
+
+    def ranges(self):
+        """Front and rear distance sensors, as cones, in meters; 3 when nothing is near."""
+        return SimulatedBase(self.pose, (0.0, 0.0), self.rng, self.boxes).ranges()
 
     def chest(self, person, height):
         """Where the person's chest appears, or None if outside the picture."""
@@ -115,6 +123,7 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
     turned when they should not have."""
     hw = Hardware(program, setup, seed, trouble.pop("loss", 0.0))
     hw.battery = trouble.get("battery", hw.battery)
+    hw.boxes = trouble.get("boxes", [])
     robot, dt, nearest, wrong = Robot(setup, hw, ask=trouble.get("ask", False)), 0.05, math.inf, 0
     cut, estop, restart = trouble.get("cut"), trouble.get("estop"), trouble.get("restart")
     asks = robot.asks = []  # times the robot asked for a raised hand
@@ -167,6 +176,9 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
                 asking and robot.drive != STOP
             )
             nearest = min(nearest, setup.body.distance(hw.pose.x, hw.pose.y))
+            robot.boxes = min(
+                getattr(robot, "boxes", math.inf), clearance([(hw.pose.x, hw.pose.y)] * 2, hw.boxes)
+            )
             robot.furniture = min(  # nearest to the edge of any furniture
                 getattr(robot, "furniture", math.inf),
                 clearance([(hw.pose.x, hw.pose.y)] * 2, setup.obstacles),
@@ -787,6 +799,27 @@ def test_the_whole_example_room(board_program, tmp_path, loss):
         assert [view for _, state, view in robot.mission.log if state == "measuring"] == [0, 1]
         assert robot.person_problem is None and robot.battery_problem is None
         assert nearest > KEEP_OUT and robot.furniture > 0.25
+
+
+def test_backing_into_something_unlisted_it_stops_and_goes_the_other_way(board_program, tmp_path):
+    """Going round clockwise it drives backwards, watched by the rear sensor alone. A box
+    the setup file does not list stands on that way."""
+    from ostinato.rover import TRAVEL
+
+    example = json.loads((Path(__file__).parent.parent / "docs" / "room.example.json").read_text())
+    path = tmp_path / "room.json"
+    path.write_text(json.dumps({**example, "start": [-0.5, 2.6, 0], "views": [30]}))
+    setup = Setup.load(path)
+    x, y = setup.body.around(math.radians(70), TRAVEL)
+    for seed in range(3):
+        clear, _, _ = drive(board_program, setup, seed, until=State.MEASURING, lies=90)
+        assert "going round the other way" not in [s for _, s, _ in clear.mission.log]
+        robot, nearest, _ = drive(
+            board_program, setup, seed, until=State.MEASURING, lies=90, boxes=[(x, y, 0.15)]
+        )
+        assert "going round the other way" in [s for _, s, _ in robot.mission.log]
+        assert robot.mission.state is State.MEASURING and nearest > KEEP_OUT
+        assert robot.boxes > 0.3  # stopped well short of it
 
 
 def test_check_command(tmp_path, capsys):
