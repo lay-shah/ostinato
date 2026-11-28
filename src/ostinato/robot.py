@@ -451,6 +451,11 @@ def summarize(path, setup):
     if shook:
         each = ", ".join(f"view {view + 1} {count / 2:.1f} s" for view, count in sorted(shook.items()))
         lines.append(f"Waited for the camera to stop shaking: {each}")
+    volts = [r["battery"] for r in rows if r.get("battery")]  # older logs have none
+    if volts:
+        lines.append(
+            f"Battery: {volts[0]:.1f} V at the start, {volts[-1]:.1f} V at the end, lowest {min(volts):.1f} V."
+        )
     rates = [r["fps"] for r in rows if r.get("fps")]  # older logs have none
     if rates:
         slow = sum(rate < MIN_FPS for rate in rates)

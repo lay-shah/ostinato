@@ -685,6 +685,12 @@ def test_replay_summary(tmp_path):
     path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *timed]))
     text = summarize(path, setup_with(tmp_path))
     assert "Pictures a second: typically 15, lowest 6." in text
+    assert "Battery" not in text  # none in this log
+    charged = [{**r, "battery": v} for r, v in zip(timed, (12.4, 12.3, 11.6, 12.1, 12.0, 11.9, 11.9, 11.8))]
+    path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *charged]))
+    assert "Battery: 12.4 V at the start, 11.8 V at the end, lowest 11.6 V." in summarize(
+        path, setup_with(tmp_path)
+    )
     assert "Below 10 a second for 1.0 s, 0.5 s of it while measuring." in text
     path.write_text("{broken")
     with pytest.raises(ValueError):
