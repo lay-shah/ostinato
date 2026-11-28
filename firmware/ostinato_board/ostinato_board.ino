@@ -28,6 +28,11 @@ const uint32_t STEP_MS = 50;  // control and report period
 // CHECK: battery mV for each count of analogRead. A 10k over 3.3k divider on a 5 V board:
 // 5000 / 1023 * (10 + 3.3) / 3.3 = 19.7, for up to 20 V. Measure with a meter and adjust.
 const float BATTERY_MV_PER_COUNT = 19.7f;
+// CHECK: below this for CUTOFF_MS the board stops the motors until it is restarted, even
+// if the computer is gone. 3.2 V a cell for a three-cell lithium battery. Readings under
+// 1 V mean the divider is not wired, and are ignored.
+const int BATTERY_CUTOFF_MV = 9600;
+const uint32_t CUTOFF_MS = 1000;
 
 ostinato::MotorGuard guard;
 ostinato::Wheel left(MM_PER_TICK), right(MM_PER_TICK);
@@ -35,6 +40,8 @@ volatile long leftTicks = 0, rightTicks = 0;
 uint32_t lastStep = 0;
 int front = -1, rear = -1;  // mm; -1 when the sensor did not answer
 bool readFront = true;
+bool flat = false;      // latched: the battery stayed below the cutoff
+uint32_t lowSince = 0;  // when it went below, or 0
 
 void leftEdge() { leftTicks += digitalRead(LEFT_B) ? -1 : 1; }
 void rightEdge() { rightTicks += digitalRead(RIGHT_B) ? 1 : -1; }  // mirrored on the other side
@@ -83,7 +90,7 @@ void loop() {
   uint32_t now = millis();
   while (Serial.available() > 0) guard.byte((char)Serial.read(), now);
   bool pressed = digitalRead(ESTOP) == HIGH;
-  guard.tick(now, pressed);
+  guard.tick(now, pressed || flat);
   if ((uint32_t)(now - lastStep) < STEP_MS) {
     if (!guard.armed()) {  // a stop takes effect at once, not at the next step
       left.stop();
@@ -105,8 +112,14 @@ void loop() {
   else rear = distance(REAR_TRIG, REAR_ECHO);
   readFront = !readFront;
   char line[64];
-  int state = pressed ? 2 : guard.armed() ? 1 : 0;
+  int state = pressed ? 2 : flat ? 3 : guard.armed() ? 1 : 0;
   int battery = (int)(analogRead(BATTERY) * BATTERY_MV_PER_COUNT + 0.5f);  // mV
+  if (battery > 1000 && battery < BATTERY_CUTOFF_MV) {
+    if (lowSince == 0) lowSince = now ? now : 1;
+    if ((uint32_t)(now - lowSince) >= CUTOFF_MS) flat = true;
+  } else {
+    lowSince = 0;
+  }
   int n = snprintf(line, sizeof line, "T,%lu,%ld,%ld,%d,%d,%d,%d", (unsigned long)now, l, r, front, rear, state,
                    battery);
   if (n > 0 && n < (int)sizeof line) {

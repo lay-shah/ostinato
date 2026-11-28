@@ -249,6 +249,8 @@ class Robot:
         for report in self.board.receive(t, self.guard):
             last, self._last = self._last, report
             self._check_battery(t, report.battery)
+            if report.cutoff and not self.battery_problem:
+                self.battery_problem = "the board stopped the motors: the battery is below its cutoff"
             if last is None:
                 continue
             if report.ms < last.ms:
