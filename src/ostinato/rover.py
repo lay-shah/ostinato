@@ -19,7 +19,11 @@ MAX_TURN_ACCEL = 2.0  # rad/s^2
 QUIET = 0.5  # seconds without news of the link, a sensor, or a command before stopping
 OBSTACLE = 0.6  # m, stop driving toward anything closer
 KEEP_OUT = 1.0  # m from the person's body, measured to the rover's center
-RING = 1.25  # m from the body: viewpoints and paths lie on this line around the person
+RING = 1.25  # m from the body to each viewpoint
+# m from the body while going round. The guard keeps KEEP_OUT plus twice the position's
+# uncertainty, and between viewpoints, with no marker in sight, that can use up all of
+# RING - KEEP_OUT and hold the rover still. It comes in to RING only at the viewpoint.
+TRAVEL = 1.5
 # A person lying down, from the chest: to the top of the head, and to the feet. A tall adult.
 CLEAR = 0.35  # m kept between the rover's middle and the edge of a known obstacle
 HEAD = 0.75  # m
@@ -27,7 +31,8 @@ FEET = 1.1  # m
 SETTLE = 2.0  # seconds still before measuring, for the mast to stop shaking
 ARRIVED = 0.05  # m
 BLOCKED = 10.0  # seconds without moving before giving up on a path
-LEG = 90.0  # longest time to reach one viewpoint
+LEG = 90.0  # longest time to reach one viewpoint, or longer for a long way round:
+LEG_PER_METER = 12.0  # s for each meter of the way, for slowing, turning, and looking for markers
 
 
 @dataclass(frozen=True)
@@ -193,14 +198,17 @@ def ring_path(pose, person, bearing, long_way=False):
     sweep = wrap(bearing - here)
     if long_way and abs(sweep) > 1e-6:
         sweep -= math.copysign(2 * math.pi, sweep)
-    # Points about 0.33 m apart along the line (15 degrees for a point person), the far
+    view = body.around(bearing, RING)
+    if abs(sweep) < math.radians(10):
+        return [view]  # nearly there: straight in
+    # Points about 0.4 m apart along the line (15 degrees for a point person), the far
     # ends of a body being up to FEET further out.
-    reach = RING + (0.0 if body.head is None else max(HEAD, FEET))
-    steps = max(1, math.ceil(abs(sweep) * reach / (RING * math.radians(15))))
+    reach = TRAVEL + (0.0 if body.head is None else max(HEAD, FEET))
+    steps = max(1, math.ceil(abs(sweep) * reach / (TRAVEL * math.radians(15))))
     # A chord dips inside the line, so the points sit slightly outside it.
-    out = RING / math.cos(math.radians(7.5))
+    out = TRAVEL / math.cos(math.radians(7.5))
     angles = [here + sweep * i / steps for i in range(steps + 1)]
-    return [*(body.around(a, out) for a in angles[:-1]), body.around(bearing, RING)]
+    return [*(body.around(a, out) for a in angles), view]
 
 
 def clearance(points, obstacles):
@@ -337,9 +345,14 @@ class Mission:
                 self._next(t, failed=False)
         return STOP
 
+    def _leg_limit(self, pose):
+        points = [(pose.x, pose.y), *self._path]
+        return max(LEG, LEG_PER_METER * sum(math.dist(a, b) for a, b in itertools.pairwise(points)))
+
     def _drive(self, t, pose, moving):
         if self._path is None:
             self._path, self._long_way = plan(pose, self.body, self.bearings[self.view], self.obstacles)
+            self._limit = self._leg_limit(pose)
             if self._long_way:
                 self.log.append((t, "going the long way round, past a known obstacle", self.view))
             self._progress = t
@@ -349,9 +362,10 @@ class Mission:
             # Blocked: try once round the other side of the person before giving up.
             self._long_way = True
             self._path = ring_path(pose, self.body, self.bearings[self.view], long_way=True)
+            self._limit = self._leg_limit(pose)
             self._progress = self._since = t
             self.log.append((t, "going round the other way", self.view))
-        if t - self._progress > BLOCKED or t - self._since > LEG:
+        if t - self._progress > BLOCKED or t - self._since > self._limit:
             self._next(t, failed=True)
             return STOP
         while self._path:

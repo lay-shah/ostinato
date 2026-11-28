@@ -154,12 +154,32 @@ class Setup:
         return setup
 
 
+BLIND = 1.0  # m driven with no marker in view, after which the position may grow too unsure
 MIN_PIXELS = 30  # a marker smaller than this in the picture is often missed
 # A marker turned away from the camera is read less far. From `python -m ostinato.marker_range`
 # with a 2 px blur: past TURNED, reliably only to TURNED_RANGE; past TURNED_AWAY, barely.
 TURNED = math.radians(45)
 TURNED_RANGE = 3.0  # m
 TURNED_AWAY = math.radians(65)
+
+
+def longest_blind(points, visible, pan, step=0.1):
+    """The longest stretch of a route, in meters, along which the camera, `pan` left of
+    the way the rover drives, sees no marker. `visible(x, y, facing)` lists markers."""
+    longest = run = 0.0
+    for (x0, y0), (x1, y1) in pairwise(points):
+        length = math.dist((x0, y0), (x1, y1))
+        if length == 0:
+            continue
+        heading = math.atan2(y1 - y0, x1 - x0)
+        for k in range(max(1, round(length / step))):
+            f = (k + 0.5) / max(1, round(length / step))
+            if visible(x0 + f * (x1 - x0), y0 + f * (y1 - y0), heading + pan):
+                run = 0.0
+            else:
+                run += length / max(1, round(length / step))
+                longest = max(longest, run)
+    return longest
 
 
 def check_setup(setup):
@@ -238,6 +258,12 @@ def check_setup(setup):
             errors.append(f"the way to view {i} passes an obstacle whichever way round it goes")
         elif long_way:
             warnings.append(f"the short way to view {i} passes an obstacle, so it will go the long way round")
+        blind = longest_blind([(where.x, where.y), *path], visible, math.radians(setup.camera.pan))
+        if blind > BLIND:
+            warnings.append(
+                f"on the way to view {i}, about {blind:.1f} m with no marker in view: it may stop to turn "
+                "and look for one. A marker where the camera faces on that stretch would help"
+            )
         where = Pose(*path[-1], 0.0)
     for a, b in zip(setup.views, setup.views[1:]):
         if abs(wrap(a - b)) < math.radians(20):
