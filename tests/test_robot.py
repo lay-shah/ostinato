@@ -555,6 +555,30 @@ def test_guard_hears_the_distance_to_the_feet(tmp_path):
     assert ear.heard[0] == pytest.approx(2.3 - 2 * 0.01, abs=0.01)
 
 
+def test_status_shows_battery_and_pictures(board_program, setup):
+    robot, _, _ = drive(board_program, setup, 1, battery=lambda t: 11.84)
+    assert "; battery 11.8 V; " in robot.status()
+    for k in range(31):
+        robot.picture(100 + k / 6)  # 6 pictures a second
+    assert "; 6 pictures/s (slow); " in robot.status()
+    assert robot.status().endswith(robot.mission.outcome)
+
+
+def test_remote_window_wraps_the_status_never_cuts_it():
+    from ostinato import remote
+
+    class Fake:
+        go, status = False, "stopped: the person lies differently from the setup file; a person must check"
+
+        def connected(self, now):
+            return True
+
+    rows = [text for text, _ in remote.lines(Fake(), 0.0)]
+    assert rows[0] == "STOPPED" and rows[-1].startswith("G go")
+    shown = " ".join(rows[2:-1])
+    assert shown == Fake.status and all(len(r) <= 58 for r in rows[2:-1])
+
+
 def test_stops_when_the_person_lies_another_way(board_program, tmp_path):
     lying = setup_with(tmp_path, person=[0, 0, 90], camera={"fov": 70, "pitch": 30, "height": 0.8})
     for seed in (1, 2, 3):
@@ -642,6 +666,24 @@ def test_rehearse_command(monkeypatch, capsys, tmp_path):
     assert "The camera stopped" in out  # the fake camera runs out
     with pytest.raises(SystemExit):
         robot.main(["--setup", example, "--rehearse", "5"])
+
+
+def test_says_when_the_board_cut_the_motors_for_the_battery(setup):
+    class Board:
+        def __init__(self):
+            self.lines = [seal(f"T,{50 * i},0,0,3000,3000,{3 if i > 2 else 1},9400") for i in range(5)]
+
+        def write(self, data):
+            pass
+
+        def read(self):
+            return self.lines.pop(0) if self.lines else b""
+
+    robot = Robot(setup, Board())
+    for i in range(5):
+        robot.step(i * 0.05)
+    assert robot.battery_problem == "the board stopped the motors: the battery is below its cutoff"
+    assert robot.status().startswith("stopped: the board stopped the motors") and robot.drive == STOP
 
 
 def test_check_command(tmp_path, capsys):

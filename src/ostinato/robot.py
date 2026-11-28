@@ -249,6 +249,8 @@ class Robot:
         for report in self.board.receive(t, self.guard):
             last, self._last = self._last, report
             self._check_battery(t, report.battery)
+            if report.cutoff and not self.battery_problem:
+                self.battery_problem = "the board stopped the motors: the battery is below its cutoff"
             if last is None:
                 continue
             if report.ms < last.ms:
@@ -323,12 +325,12 @@ class Robot:
         return a is not None and a.wants_ask and self.mission.state is State.MEASURING
 
     def _check_battery(self, t, volts):
-        if self.setup.battery_low is None or not math.isfinite(volts):
+        if not math.isfinite(volts):
             return
         self.battery.append((t, volts))
         while self.battery[0][0] < t - BATTERY_WINDOW:
             self.battery.popleft()
-        if t - self.battery[0][0] >= 0.75 * BATTERY_WINDOW:
+        if self.setup.battery_low is not None and t - self.battery[0][0] >= 0.75 * BATTERY_WINDOW:
             typical = float(np.median([v for _, v in self.battery]))
             if typical < self.setup.battery_low and not self.battery_problem:
                 self.battery_problem = f"the battery is low ({typical:.1f} V)"
@@ -408,7 +410,13 @@ class Robot:
         state = self.mission.state.value
         if self.shaking and self.mission.state is State.SETTLING:
             state += ", waiting for the camera to stop shaking"
-        return f"{state}; {self.guard.reason}; {where}; {self.mission.outcome}"
+        health = []
+        if self.battery:
+            health.append(f"battery {self.battery[-1][1]:.1f} V")
+        if self.fps is not None:
+            health.append(f"{self.fps:.0f} pictures/s" + (" (slow)" if self.fps < MIN_FPS else ""))
+        parts = [state, self.guard.reason, where, *health, self.mission.outcome]
+        return "; ".join(parts)
 
 
 def view_pose(setup, view):
