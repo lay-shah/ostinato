@@ -16,6 +16,7 @@ import hmac
 import os
 import secrets
 import socket
+import textwrap
 import time
 from pathlib import Path
 
@@ -169,6 +170,20 @@ class Remote:
         self.sock.close()
 
 
+def lines(remote, now):
+    """What the operator's window shows: (text, BGR colour) for each line. The rover's
+    status is wrapped, never cut, since its end may say a person must check."""
+    link = "connected" if remote.connected(now) else "NOT CONNECTED: the rover is stopping"
+    state = "GO: moving allowed" if remote.go else "STOPPED"
+    status = [(part, (200, 200, 200)) for part in textwrap.wrap(remote.status, 58)]
+    return [
+        (state, (80, 200, 80) if remote.go else (60, 60, 230)),
+        (link, (220, 220, 220)),
+        *status,
+        ("G go   Space stop   Q quit (stops it)", (150, 150, 150)),
+    ]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -197,19 +212,11 @@ def main(argv=None):
         while True:
             now = time.monotonic()
             remote.step(now)
-            screen = np.full((220, 760, 3), 30, np.uint8)
-            link = "connected" if remote.connected(now) else "NOT CONNECTED: the rover is stopping"
-            state = "GO: moving allowed" if remote.go else "STOPPED"
-            for i, (text, color) in enumerate(
-                [
-                    (state, (80, 200, 80) if remote.go else (60, 60, 230)),
-                    (link, (220, 220, 220)),
-                    (remote.status[:70], (200, 200, 200)),
-                    ("G go   Space stop   Q quit (stops it)", (150, 150, 150)),
-                ]
-            ):
+            rows = lines(remote, now)
+            screen = np.full((40 + 44 * len(rows), 760, 3), 30, np.uint8)
+            for i, (text, color) in enumerate(rows):
                 cv2.putText(
-                    screen, text, (20, 45 + 48 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.8 if i else 1.1, color, 2
+                    screen, text, (20, 45 + 44 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.8 if i else 1.1, color, 2
                 )
             cv2.imshow(title, screen)
             key = cv2.waitKey(max(1, int(EVERY * 1000))) & 0xFF

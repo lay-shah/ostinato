@@ -548,6 +548,30 @@ def test_guard_hears_the_distance_to_the_feet(tmp_path):
     assert ear.heard[0] == pytest.approx(2.3 - 2 * 0.01, abs=0.01)
 
 
+def test_status_shows_battery_and_pictures(board_program, setup):
+    robot, _, _ = drive(board_program, setup, 1, battery=lambda t: 11.84)
+    assert "; battery 11.8 V; " in robot.status()
+    for k in range(31):
+        robot.picture(100 + k / 6)  # 6 pictures a second
+    assert "; 6 pictures/s (slow); " in robot.status()
+    assert robot.status().endswith(robot.mission.outcome)
+
+
+def test_remote_window_wraps_the_status_never_cuts_it():
+    from ostinato import remote
+
+    class Fake:
+        go, status = False, "stopped: the person lies differently from the setup file; a person must check"
+
+        def connected(self, now):
+            return True
+
+    rows = [text for text, _ in remote.lines(Fake(), 0.0)]
+    assert rows[0] == "STOPPED" and rows[-1].startswith("G go")
+    shown = " ".join(rows[2:-1])
+    assert shown == Fake.status and all(len(r) <= 58 for r in rows[2:-1])
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
