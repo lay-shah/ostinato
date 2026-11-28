@@ -94,3 +94,16 @@ def test_waits_for_the_drawn_wobble_to_die_down():
     assert 1.0 < shook[-1] - start < 3.0
     assert end - shook[-1] >= 2.0 - 0.1
     assert any("camera still shaking" in headline for _, shaking, headline in settling if shaking)
+
+
+def test_says_when_it_goes_backwards():
+    from ostinato.rover import Drive
+
+    demo = RoverDemo()
+    demo.step()
+    assert demo.mission.state is State.DRIVING
+    demo.drive = Drive(-0.2, 0.0)
+    headline, detail, _ = demo.status()
+    assert headline == "View 1 of 3: backwards at 0.2 m/s" and "camera on the person" in detail
+    demo.drive = Drive(0.3, 0.0)
+    assert demo.status()[0] == "View 1 of 3: driving at 0.3 m/s"

@@ -175,6 +175,12 @@ class RoverDemo:
             return f"{view}: stopped and measuring", now.capitalize(), BLUE
         if self.mission.state is State.DRIVING:
             why = "Moving to a better view" if self.mission.view else "Driving to the first view"
+            if self.drive.speed < 0:
+                return (
+                    f"{view}: backwards at {-self.drive.speed:.1f} m/s",
+                    "Going round this way backwards keeps the camera on the person and the markers.",
+                    INK,
+                )
             return (
                 f"{view}: driving at {abs(self.drive.speed):.1f} m/s",
                 f"{why}. Not measuring while moving.",
