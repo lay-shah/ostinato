@@ -40,7 +40,7 @@ With four wheels, wire the two motors on each side together as one, and put the 
 
 The HC-SR04 sends a 5 V echo. On a board with 3.3 V pins, put a divider on each echo line, 1 kΩ from the sensor and 2 kΩ to ground, or the pin may be damaged.
 
-The battery goes to A1 through a divider: 10 kΩ from the battery's positive side after its fuse, and 3.3 kΩ from A1 to ground. On a 5 V board that reads batteries up to 20 V. On a 3.3 V board, or above 20 V, choose resistors that keep A1 below the board's own voltage at full charge, and change `BATTERY_MV_PER_COUNT` to match. Put `battery_low` in the setup file so the rover stops before the battery is flat.
+The battery goes to A1 through a divider: 10 kΩ from the battery's positive side after its fuse, and 3.3 kΩ from A1 to ground. On a 5 V board that reads batteries up to 20 V. On a 3.3 V board, or above 20 V, choose resistors that keep A1 below the board's own voltage at full charge, and change `BATTERY_MV_PER_COUNT` to match. Put `battery_low` in the setup file so the rover stops before the battery is flat. The board also has its own cutoff, `BATTERY_CUTOFF_MV`, set for a three-cell lithium battery: below it for a second, it stops the motors until it is restarted, so the battery is not run flat even if the computer has stopped. Set it for your battery, a little below `battery_low`.
 
 ## Before the first drive
 

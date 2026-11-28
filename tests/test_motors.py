@@ -131,7 +131,7 @@ def test_parse():
         b"",
         good[:-1],
         good.replace(b"800", b"900"),
-        seal("T,1,2,3,4,5,3")[:-1],
+        seal("T,1,2,3,4,5,4")[:-1],
         seal("T,1,2,3,-2,5,1")[:-1],
         seal("T,1,2,3,4,5")[:-1],
         b"\xff" * 20,
@@ -141,7 +141,9 @@ def test_parse():
         seal("T,1,2,3,4,5,1,12000,9")[:-1],
     ):
         assert parse(bad) is None
-    assert math.isnan(r.battery)  # an older report, without it
+    assert math.isnan(r.battery) and not r.cutoff  # an older report, without it
+    flat = parse(seal("T,9,0,0,800,800,3,9400")[:-1])
+    assert flat.cutoff and not flat.armed and not flat.estop
     assert parse(seal("T,1200,-5,7,800,-1,1,11870")[:-1]).battery == pytest.approx(11.87)
     assert math.isnan(parse(seal("T,1200,-5,7,800,-1,1,0")[:-1]).battery)  # not wired
 

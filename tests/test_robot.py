@@ -592,6 +592,24 @@ def test_stops_when_the_person_lies_another_way(board_program, tmp_path):
         assert robot.drive == STOP
 
 
+def test_says_when_the_board_cut_the_motors_for_the_battery(setup):
+    class Board:
+        def __init__(self):
+            self.lines = [seal(f"T,{50 * i},0,0,3000,3000,{3 if i > 2 else 1},9400") for i in range(5)]
+
+        def write(self, data):
+            pass
+
+        def read(self):
+            return self.lines.pop(0) if self.lines else b""
+
+    robot = Robot(setup, Board())
+    for i in range(5):
+        robot.step(i * 0.05)
+    assert robot.battery_problem == "the board stopped the motors: the battery is below its cutoff"
+    assert robot.status().startswith("stopped: the board stopped the motors") and robot.drive == STOP
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
