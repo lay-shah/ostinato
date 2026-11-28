@@ -1,7 +1,9 @@
 """The setup file: a room, measured by a person, for the rover. Check one with
 `python -m ostinato.robot --setup room.json --check`, add `--map room.png` to draw it.
 
-The setup file, in meters and degrees, measured by a person:
+The setup file, in meters and degrees, measured by a person. The person's chest is
+(0, 0); +y is a quarter turn left of +x, seen from above; angles start at +x and turn
+toward +y. docs/MEASURING.md says how to measure a room.
 
     {"track": 0.27, "ticks_per_meter": 2000,
      "start": [2.4, 0.3, 140], "person": [0, 0, 90], "views": [30, 150],
