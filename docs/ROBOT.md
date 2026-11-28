@@ -49,7 +49,7 @@ About $470-725 in total. The 27 cm comes from `python -m ostinato.tipping` with 
 ## Safety rules
 
 - A person holds the emergency stop whenever the motors have power.
-- Slower than 0.3 m/s near people. Stop at least 1 m away from every part of them, head and feet included. Never drive over or behind someone.
+- Slower than 0.3 m/s near people, and 0.2 m/s backwards. Stop at least 1 m away from every part of them, head and feet included. Never drive over or behind someone.
 - Motors stop if the computer, remote, or a sensor goes quiet for 0.5 s.
 - Never measure while moving. After stopping, it waits until the picture itself has been still for 2 s, not just the wheels. If it never steadies within 10 s, it tries the next view. A blank wall cannot be followed, so there it only waits 2 s.
 - Check that it does not tip on a 10 degree slope or when stopping suddenly, with the mast on.
@@ -61,7 +61,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 
 1. **Emergency stop switch.** One pole cuts motor power directly. The other tells the board, wired so that a cut wire reads as pressed. See [WIRING.md](WIRING.md).
 2. **Motor board** (`firmware/ostinato_board`). Stops after 0.5 s without a good command, ignores damaged or repeated commands, waits for a stop command after any halt, cuts off a wheel that is pushed but does not turn for a second, and stops for good, until it is restarted, when the battery stays below its own cutoff for a second, even with the computer gone. Wheel speeds above 450 mm/s are refused.
-3. **Guard** (`ostinato.rover`). Every command passes through it. It limits speed and acceleration, keeps 1 m from the person (from the whole body when the setup file says which way they lie), stops for obstacles, and stops when the remote, a sensor, the position estimate, or its own loop goes quiet for 0.5 s. Turning on the spot is the only movement allowed without knowing how far away the person is. An emergency stop holds until the operator clears it.
+3. **Guard** (`ostinato.rover`). Every command passes through it. It limits speed (0.2 m/s backwards) and acceleration, keeps 1 m from the person (from the whole body when the setup file says which way they lie), stops for obstacles, and stops when the remote, a sensor, the position estimate, or its own loop goes quiet for 0.5 s. Turning on the spot is the only movement allowed without knowing how far away the person is. An emergency stop holds until the operator clears it.
 4. **Position** (`ostinato.localize`). When it is unsure where it is, it says nothing to the guard, so the rover stops. It may first turn once around in place to find a marker.
 5. **Person check.** With the camera's height in the setup file, it stops if the person is more than 0.25 m from where the file says, or was not seen in place before it leaves a viewpoint. With the head direction too, it stops if their shoulders and hips show them lying more than 45 degrees from it, head and feet swapped included.
 6. **Battery.** With `battery_low` in the setup file, the rover holds its wheels and asks for a person once the battery has stayed below it for about 2 s, so a short dip when starting off passes.

@@ -40,6 +40,8 @@ def test_speed_is_limited_and_builds_up_but_stops_at_once():
     assert drive_for(guard, 3, Drive(5, 5), 0.2) == Drive(rover.MAX_SPEED, rover.MAX_TURN)
     tell(guard, 3.3)
     assert guard.allow(3.3, STOP) == STOP
+    # Backwards, slower.
+    assert drive_for(guard, 3.4, Drive(-5, 0), 3).speed == pytest.approx(-rover.MAX_REVERSE)
 
 
 @pytest.mark.parametrize("quiet", ["link", "sensors", "person"])
@@ -318,7 +320,7 @@ def test_goes_round_clockwise_backwards_to_keep_the_camera_on_the_person():
             t += 0.05
         assert mission.state is State.FACING
         # Going round; the last few centimeters straight in may be either way.
-        assert (min(speeds) < -0.2) == backwards
+        assert (min(speeds) < -0.15) == backwards and min(speeds) >= -rover.MAX_REVERSE
         assert (
             sum(v < -0.1 for v in speeds) > sum(v > 0.1 for v in speeds) if backwards else min(speeds) > -0.05
         )

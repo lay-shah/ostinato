@@ -13,6 +13,7 @@ from enum import Enum
 from .decision import Action, Assessor, Status
 
 MAX_SPEED = 0.3  # m/s
+MAX_REVERSE = 0.2  # m/s backwards: one distance sensor behind, and less room to stop
 MAX_TURN = 1.0  # rad/s
 MAX_ACCEL = 0.5  # m/s^2, speeding up; stopping is immediate
 MAX_TURN_ACCEL = 2.0  # rad/s^2
@@ -117,8 +118,9 @@ class Guard:
             start = last if value * last >= 0 else 0.0
             return max(start - rate * step, min(start + rate * step, value))
 
+        speed = max(-MAX_REVERSE, want.speed)
         self._last = Drive(
-            ramp(want.speed, self._last.speed, MAX_SPEED, MAX_ACCEL),
+            ramp(speed, self._last.speed, MAX_SPEED, MAX_ACCEL),
             ramp(want.turn, self._last.turn, MAX_TURN, MAX_TURN_ACCEL),
         )
         return self._last
