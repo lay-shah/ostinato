@@ -203,6 +203,11 @@ def check_setup(setup):
             )
         else:
             errors.append(f"view {i} sees no marker: put one beyond the person, as seen from there")
+    if setup.lens_height is None:
+        warnings.append(
+            "no camera height: the rover cannot check that the person is where the file says, "
+            "or lies the way it says, and will not stop if not"
+        )
     if setup.head is None:
         warnings.append(
             "person has no head direction: for someone lying down, give [x, y, head] so the rover "
