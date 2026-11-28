@@ -18,8 +18,9 @@ VIEWS = {
 SETUP = {
     "front-1m": "Camera straight ahead, about 1 m away.",
     "angled-1m": "Camera about 45 degrees to one side, about 1 m away.",
-    "side-low": "Camera at their side, level, about 0.6 m high and 1 m away. Secure it.",
-    "side-high": "Camera at their side, level, about 0.9 m high and 1 m away. Secure it.",
+    # 1.25 m from the middle of the body, where the rover's camera stands (rover.RING).
+    "side-low": "Camera beside their chest, level, about 0.6 m high and 1.25 m from the middle of their body. Secure it.",
+    "side-high": "Camera beside their chest, level, about 0.9 m high and 1.25 m from the middle of their body. Secure it.",
 }
 
 

@@ -81,3 +81,11 @@ def test_stopping_early_keeps_saved_trials(monkeypatch, tmp_path):
 def test_speech_is_optional(monkeypatch):
     monkeypatch.setattr(trial.shutil, "which", lambda c: None)
     trial.say("Start")
+
+
+def test_lying_views_stand_where_the_rover_would():
+    from ostinato.rover import RING
+    from ostinato.trial import SETUP, VIEWS
+
+    for view in VIEWS["lying"]:
+        assert f"{RING} m from the middle of their body" in SETUP[view]
