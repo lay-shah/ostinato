@@ -552,6 +552,17 @@ def main(argv=None):
         return
     if not args.port:
         parser.error("--port is needed, except with --check, --replay, or --rehearse")
+    # Never drive on a setup file with problems; notes are only printed.
+    try:
+        errors, notes = check_setup(Setup.load(args.setup))
+    except ValueError as error:
+        parser.exit(1, f"{error}\n")
+    if errors:
+        parser.exit(
+            1, "".join(f"Problem: {e}\n" for e in errors) + "Not driving. Fix the setup file first.\n"
+        )
+    for note in notes:
+        print(f"Note: {note}")
     log = None
     if args.log:
         try:
