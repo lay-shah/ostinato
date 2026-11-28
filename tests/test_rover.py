@@ -113,10 +113,11 @@ def simulate(
     shaking=lambda view, t: False,
     body=None,
     truth=None,
+    start=None,
 ):
     """Run a mission and check the rules at every step."""
     rng = np.random.default_rng(seed)
-    a, r = rng.uniform(-math.pi, math.pi), rng.uniform(1.6, 4)
+    a, r = start or (rng.uniform(-math.pi, math.pi), rng.uniform(1.6, 4))
     lying = body or rover.Body((0.0, 0.0))
     start = lying.around(a, r)
     base = SimulatedBase(Pose(*start, rng.uniform(-3, 3)), lying, rng, obstacles)
@@ -269,3 +270,16 @@ def test_knowing_the_head_keeps_it_1_m_from_the_feet():
         for seed in range(2070, 2080)
     )
     assert worst < 0.5
+
+
+def test_blocked_the_short_way_it_goes_round_the_other_side():
+    # Starting at 1.4 rad, view 1 is at 0: the short way passes a box at 0.7 rad.
+    box = [(rover.RING * math.cos(0.7), rover.RING * math.sin(0.7), 0.2)]
+    for seed in range(2090, 2095):
+        mission, closest, _ = simulate(seed, box, bearings=(0.0,), start=(1.4, 2.2))
+        states = [state for _, state, _ in mission.log]
+        assert "going round the other way" in states and mission.outcome == "15.0 breaths/min"
+        assert closest >= KEEP_OUT
+    # Unblocked, it takes the short way.
+    mission, _, _ = simulate(2090, bearings=(0.0,), start=(1.4, 2.2))
+    assert "going round the other way" not in [state for _, state, _ in mission.log]

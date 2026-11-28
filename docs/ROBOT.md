@@ -92,6 +92,7 @@ It combines the wheel encoders with the printed markers, which the measuring cam
 Simulated wheels, sightings, and boards are kinder than real ones.
 
 - Against the compiled board code, 300 of 300 drives reached the first viewpoint, including with 30% of messages lost or damaged, and none came nearer than 1.2 m. Hiding markers beyond 4 m changed nothing in 120 more drives.
+- With a box on the short way round to a viewpoint, it stopped for it, turned back, and reached the view the other way round, in 5 of 5 drives. It tries the other way once per view, then moves on.
 - With no marker in sight, it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again.
 - The person check caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
 - Drawn markers, 16 cm, read by a 720p 70 degree camera: facing it, reliably to 6 m when sharp and 5 m when blurred (2 px), with distances off by 1-3% and directions by about 0.001 rad. That is inside what the position estimate assumes (4% and 0.02 rad) to about 4 m. Turned 50 degrees away and blurred, only to about 3 m, and blurred in a dim room, 2 m. Without facings in the setup file, the check counts every marker within 4.9 m as seen, whichever way it faces.
