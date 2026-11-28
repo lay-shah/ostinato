@@ -321,8 +321,27 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
     return lines
 
 
-def rehearse(setup, view, camera, finder, clock=time.monotonic, show=None):
-    """Watch through the camera, standing where the rover would. Nothing moves."""
+def rehearse(setup, views, camera, finder, clock=time.monotonic, show=None):
+    """Watch through the camera, standing where the rover would, at each of `views` in
+    turn (0 is the start). Nothing moves. `show(frame)` may answer "next" or "quit".
+    Ends with what was last seen at each."""
+    views = [views] if isinstance(views, int) else list(views)
+    last = {}
+    try:
+        for i, view in enumerate(views):
+            more = "N goes to the next place, " if i + 1 < len(views) else ""
+            answer = _rehearse_one(setup, view, camera, finder, clock, show, more, last)
+            if answer != "next":
+                break
+    finally:
+        if len(last) > 1:
+            print("Summary, as last seen:")
+            for view, lines in last.items():
+                where = "start" if view == 0 else f"view {view}"
+                print(f"  {where}: " + ("; ".join(lines) or "nothing to compare"))
+
+
+def _rehearse_one(setup, view, camera, finder, clock, show, more, last):
     import cv2
 
     pose, steady, frames, printed = view_pose(setup, view), Steadiness(), deque(maxlen=31), None
@@ -330,12 +349,12 @@ def rehearse(setup, view, camera, finder, clock=time.monotonic, show=None):
     print(
         f"Stand the camera at {where}: ({pose.x:.2f}, {pose.y:.2f}) m, facing so the person is in the middle."
     )
-    print("Nothing moves. Q quits.\n", flush=True)
+    print(f"Nothing moves. {more}Q quits.\n", flush=True)
     while True:
         ok, frame = camera.read()
         if not ok or frame.shape[:2] != (setup.camera.height, setup.camera.width):
             print("The camera stopped or gives the wrong size.")
-            return
+            return "quit"
         t = clock()
         frames.append(t)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -353,9 +372,11 @@ def rehearse(setup, view, camera, finder, clock=time.monotonic, show=None):
             rate = (len(frames) - 1) / (frames[-1] - frames[0]) if frames[-1] > frames[0] else 0.0
             state = {True: "still", False: "moving", None: "too plain to tell if still"}[still]
             lines = rehearsal(setup, pose, find_markers(gray, setup.camera), chest, axis)
+            last[view] = lines
             print("\n".join([f"{rate:.0f} pictures/s, picture {state}", *lines]) + "\n", flush=True)
-        if show and show(frame):
-            return
+        answer = show(frame) if show else None
+        if answer in ("next", "quit"):
+            return answer
 
 
 def summarize(path, setup, raw=None):
@@ -460,9 +481,9 @@ def main(argv=None):
     parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
     parser.add_argument(
         "--rehearse",
-        type=int,
         metavar="VIEW",
-        help="no board: compare what the camera sees with the setup file, at view VIEW (0 is the start)",
+        help="no board: compare what the camera sees with the setup file, at view VIEW (0 is the "
+        "start), or at each in turn with 'all'",
     )
     args = parser.parse_args(argv)
     from .remote import Listener, load_key
@@ -498,7 +519,14 @@ def main(argv=None):
     if args.rehearse is not None:
         try:
             setup = Setup.load(args.setup)
-            view_pose(setup, args.rehearse)
+            if args.rehearse == "all":
+                views = list(range(len(setup.views) + 1))
+            elif args.rehearse.isdigit():
+                views = [int(args.rehearse)]
+            else:
+                raise ValueError("--rehearse takes a view number, 0 for the start, or all")
+            for view in views:
+                view_pose(setup, view)
         except ValueError as error:
             parser.exit(1, f"{error}\n")
         camera = open_camera(args.camera)
@@ -510,10 +538,11 @@ def main(argv=None):
 
         def show(frame):
             cv2.imshow("Ostinato rehearsal", frame)
-            return cv2.waitKey(1) & 0xFF == ord("q")
+            key = cv2.waitKey(1) & 0xFF
+            return {ord("q"): "quit", ord("n"): "next"}.get(key)
 
         try:
-            rehearse(setup, args.rehearse, camera, finder, show=show)
+            rehearse(setup, views, camera, finder, show=show)
         except KeyboardInterrupt:
             pass
         finally:
