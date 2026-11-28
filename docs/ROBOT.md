@@ -78,7 +78,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `python -m ostinato.robot --setup room.json --check`, with `--map room.png` to draw it | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path, furniture in the way or hiding a marker, long stretches of the way with no marker in view |
 | `python -m ostinato.robot --setup room.json --rehearse all`, or double-click `launch/Rover Rehearsal.command` | No board needed: stand a webcam at the start and then each view, pressing N to move on, and compare what it sees, markers, the person, and which way they lie, with the setup file. A summary for every place ends it. `--rehearse 1` does one view, 0 the start |
 | `python -m ostinato.remote --make-key key.txt` | Makes the key shared by the remote and the rover |
-| `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
+| `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It refuses a setup file the check finds problems in, and starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
 | `python -m ostinato.remote --robot <address> --key key.txt` | The operator's window: G lets it move, Space stops it |
 | `… --log data/run.jsonl`, then `--replay data/run.jsonl` | Saves and summarizes a run, without pictures |
 | `python -m ostinato.rover_demo` | The whole thing on a drawn person and room; also `launch/Rover Simulation.command` |

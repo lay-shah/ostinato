@@ -846,6 +846,16 @@ def test_rehearse_every_view_in_turn(monkeypatch, capsys):
             robot.main(["--setup", example, "--rehearse", bad])
 
 
+def test_will_not_drive_on_a_setup_with_problems(program, tmp_path, capsys):
+    (tmp_path / "room.json").write_text(json.dumps({**ROOM, "start": [0.8, 0, 0]}))  # too near
+    made = len(Port.made)
+    with pytest.raises(SystemExit):
+        program(Camera(5))
+    out = capsys.readouterr()
+    assert "start is 0.80 m" in out.err and "Not driving" in out.err
+    assert len(Port.made) == made  # the board's port was never opened
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
