@@ -625,8 +625,11 @@ def test_setup_check_knows_the_furniture(tmp_path):
     assert check([], **below) == ([], [])
     errors, warnings = check([[1.3, -0.6, 0.15]], **below)
     assert errors == [] and any("short way to view 1 passes an obstacle" in w for w in warnings)
-    # Clockwise, the camera faces away from the person, at walls with no markers.
-    assert any("4.5 m with no marker in view" in w for w in warnings)
+    # Going round clockwise it goes backwards, so the camera still faces the markers.
+    assert not any("no marker in view" in w for w in warnings)
+    # Facing away from every marker, a route is blind.
+    _, warnings = check([[1.3, -0.6, 0.15]], **below, camera={**example["camera"], "pan": -90})
+    assert any("with no marker in view" in w for w in warnings)
     # Boxes on both ways round.
     errors, _ = check([[1.3, -0.6, 0.15], [-1.3, -0.3, 0.15]], **below)
     assert any("way to view 1 passes an obstacle whichever way" in e for e in errors)
@@ -763,10 +766,9 @@ def test_the_whole_example_room(board_program, tmp_path, loss):
     is known, markers that face the views, furniture on the short way to view 1, the
     camera height, and messages lost."""
     example = json.loads((Path(__file__).parent.parent / "docs" / "room.example.json").read_text())
-    # Going round clockwise, the camera faces away from the person, so markers on the far
-    # walls, above the head and below the feet, keep it sure of where it is.
-    markers = {**example["markers"], "5": [0, -4.0, 90], "6": [0, 3.8, 270]}
-    room = {**example, "start": [1.5, -2.2, 90], "obstacles": [[1.3, -0.6, 0.15]], "markers": markers}
+    # The long way round is clockwise, which it drives backwards to keep the camera on
+    # the person and the markers beyond them.
+    room = {**example, "start": [1.5, -2.2, 90], "obstacles": [[1.3, -0.6, 0.15]]}
     path = tmp_path / "room.json"
     path.write_text(json.dumps(room))
     setup = Setup.load(path)

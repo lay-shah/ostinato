@@ -302,3 +302,25 @@ def test_clearance():
     assert rover.clearance([(0, 0), (2, 0)], [(1, 1, 0.5)]) == pytest.approx(0.5)
     assert rover.clearance([(0, 0), (2, 0)], [(3, 0, 0.5)]) == pytest.approx(0.5)
     assert rover.clearance([(0, 0), (2, 0)], [(1, 0.2, 0.5)]) < 0
+
+
+def test_goes_round_clockwise_backwards_to_keep_the_camera_on_the_person():
+    # The camera looks left: forwards counter-clockwise, backwards clockwise.
+    for views, backwards in (((1.4,), False), ((-1.4,), True)):
+        rng = np.random.default_rng(3)
+        base = SimulatedBase(Pose(rover.TRAVEL, 0.0, math.pi / 2), (0.0, 0.0), rng)
+        guard, mission, drive, t, speeds = Guard(), Mission((0.0, 0.0), list(views)), STOP, 0.0, []
+        while mission.state is State.DRIVING and t < 60:
+            base.tell(guard, t)
+            drive = guard.allow(t, mission.update(t, base.pose, drive != STOP))
+            speeds.append(drive.speed)
+            base.step(drive, 0.05)
+            t += 0.05
+        assert mission.state is State.FACING
+        # Going round; the last few centimeters straight in may be either way.
+        assert (min(speeds) < -0.2) == backwards
+        assert (
+            sum(v < -0.1 for v in speeds) > sum(v > 0.1 for v in speeds) if backwards else min(speeds) > -0.05
+        )
+    assert rover.clockwise((0, 0), (1, 0), (1, -1)) and not rover.clockwise((0, 0), (1, 0), (1, 1))
+    assert not rover.clockwise((0, 0), (2, 0), (1, -0.1))  # nearly straight in

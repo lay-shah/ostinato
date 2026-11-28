@@ -64,6 +64,7 @@ from .rover import (
     Pose,
     State,
     clearance,
+    clockwise,
     plan,
     wrap,
 )
@@ -164,15 +165,18 @@ TURNED_RANGE = 3.0  # m
 TURNED_AWAY = math.radians(65)
 
 
-def longest_blind(points, visible, pan, step=0.1):
+def longest_blind(points, visible, pan, step=0.1, center=None):
     """The longest stretch of a route, in meters, along which the camera, `pan` left of
-    the way the rover drives, sees no marker. `visible(x, y, facing)` lists markers."""
+    the rover's front, sees no marker. `visible(x, y, facing)` lists markers. With
+    `center`, the person's chest, it goes round clockwise backwards, as the rover does."""
     longest = run = 0.0
     for (x0, y0), (x1, y1) in pairwise(points):
         length = math.dist((x0, y0), (x1, y1))
         if length == 0:
             continue
         heading = math.atan2(y1 - y0, x1 - x0)
+        if center is not None and clockwise(center, (x0, y0), (x1, y1)):
+            heading += math.pi  # backwards
         for k in range(max(1, round(length / step))):
             f = (k + 0.5) / max(1, round(length / step))
             if visible(x0 + f * (x1 - x0), y0 + f * (y1 - y0), heading + pan):
@@ -259,7 +263,9 @@ def check_setup(setup):
             errors.append(f"the way to view {i} passes an obstacle whichever way round it goes")
         elif long_way:
             warnings.append(f"the short way to view {i} passes an obstacle, so it will go the long way round")
-        blind = longest_blind([(where.x, where.y), *path], visible, math.radians(setup.camera.pan))
+        route = [(where.x, where.y), *path]
+        blind = longest_blind(route[:-1], visible, math.radians(setup.camera.pan), center=setup.person)
+        blind = max(blind, longest_blind(route[-2:], visible, math.radians(setup.camera.pan)))
         if blind > BLIND:
             warnings.append(
                 f"on the way to view {i}, about {blind:.1f} m with no marker in view: it may stop to turn "
