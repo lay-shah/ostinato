@@ -51,6 +51,7 @@ from .rover import KEEP_OUT, RING, STOP, Body, Drive, Guard, Mission, Pose, Stat
 from .shake import Steadiness
 
 CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
+LIES_OFF = math.radians(45)  # the body turned this far from the setup file stops the rover
 MOVED = 0.25  # m off before stopping: views are 1.25 m out, and 1 m must be kept
 LOOKS = 15  # sightings of the person before judging
 SEARCH_TURN = 0.4  # rad/s, turning in place to find a marker when unsure where it is
@@ -219,6 +220,7 @@ class Robot:
         self._frames = deque(maxlen=31)  # times of the last pictures
         self._last = None
         self.seen_person = deque(maxlen=LOOKS)
+        self.seen_axis = deque(maxlen=LOOKS)  # directions from hips to shoulders, in the room
         self.confirmed = 0  # sightings of the person in place at this viewpoint
         self.person_problem = None
         self.battery_problem = None
@@ -236,10 +238,12 @@ class Robot:
         asking=False,
         chest=None,
         shaking=False,
+        axis=None,
     ):
         """`link` is whether the operator is there. `chest` is the middle of the person's
         shoulders and hips in the picture, when seen. `shaking` is whether the picture
-        still moves. Returns the command sent."""
+        still moves. `axis` is (shoulders, hips) in the picture, each the middle of the
+        two. Returns the command sent."""
         if link:
             self.guard.link(t)
         for report in self.board.receive(t, self.guard):
@@ -256,6 +260,7 @@ class Robot:
             self.moving = (report.left, report.right) != (last.left, last.right)
         self.seen = [s.marker for s in sightings if self.localizer.see(s)]
         self._check_person(chest)
+        self._check_lying(axis)
         self.localizer.tell(self.guard, t, self.setup.body)
         moving = self.moving or self.drive != STOP
         was = self.mission.state
@@ -341,6 +346,25 @@ class Robot:
                 self.person_problem = self.person_problem or "the person is not where the setup file says"
             else:
                 self.confirmed += 1
+
+    def _check_lying(self, axis):
+        """For someone lying down: do they lie the way the setup file says? The rover's
+        distance from their head and feet depends on it."""
+        s = self.setup
+        if axis is None or s.head is None or s.lens_height is None or not self.localizer.good or self.moving:
+            return
+        ends = [ground(s.camera, p, s.lens_height - CHEST_HEIGHT) for p in axis]
+        if None in ends:
+            return
+        (sx, sy), (hx, hy) = (place(self.localizer.pose, e) for e in ends)
+        if not 0.2 < math.hypot(sx - hx, sy - hy) < 1.0:
+            return  # not a torso lying flat: seen end on, or a bad pose
+        self.seen_axis.append(math.atan2(sy - hy, sx - hx))
+        if len(self.seen_axis) == LOOKS:
+            angles = np.array(self.seen_axis)
+            typical = math.atan2(np.sin(angles).mean(), np.cos(angles).mean())
+            if abs(wrap(typical - s.head)) > LIES_OFF:
+                self.person_problem = self.person_problem or "the person lies differently from the setup file"
 
     def _dt(self, t):
         last = getattr(self, "_t", None)
@@ -555,9 +579,11 @@ def main(argv=None):
                 shaking = steady.update(t, gray) is False
             else:
                 steady = None
-            chest = None
+            chest = axis = None
             if measuring and finder.points is not None:
-                chest = tuple(finder.points.mean(axis=0) * (frame.shape[1] / 640))
+                points = finder.points * (frame.shape[1] / 640)
+                chest = tuple(points.mean(axis=0))
+                axis = (tuple(points[:2].mean(axis=0)), tuple(points[2:].mean(axis=0)))
             link = True
             if listener:
                 listener.poll(t, robot.guard, robot.status())  # tells the guard itself
@@ -571,6 +597,7 @@ def main(argv=None):
                 check.active,
                 chest,
                 shaking,
+                axis,
             )
             if measuring and robot.mission.state is not State.MEASURING:
                 monitor.reset()  # never carry readings from one view to the next

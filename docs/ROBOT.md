@@ -62,7 +62,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 2. **Motor board** (`firmware/ostinato_board`). Stops after 0.5 s without a good command, ignores damaged or repeated commands, waits for a stop command after any halt, and cuts off a wheel that is pushed but does not turn for a second. Wheel speeds above 450 mm/s are refused.
 3. **Guard** (`ostinato.rover`). Every command passes through it. It limits speed and acceleration, keeps 1 m from the person (from the whole body when the setup file says which way they lie), stops for obstacles, and stops when the remote, a sensor, the position estimate, or its own loop goes quiet for 0.5 s. Turning on the spot is the only movement allowed without knowing how far away the person is. An emergency stop holds until the operator clears it.
 4. **Position** (`ostinato.localize`). When it is unsure where it is, it says nothing to the guard, so the rover stops. It may first turn once around in place to find a marker.
-5. **Person check.** With the camera's height in the setup file, it stops if the person is more than 0.25 m from where the file says, or was not seen in place before it leaves a viewpoint.
+5. **Person check.** With the camera's height in the setup file, it stops if the person is more than 0.25 m from where the file says, or was not seen in place before it leaves a viewpoint. With the head direction too, it stops if their shoulders and hips show them lying more than 45 degrees from it, head and feet swapped included.
 6. **Battery.** With `battery_low` in the setup file, the rover holds its wheels and asks for a person once the battery has stayed below it for about 2 s, so a short dip when starting off passes.
 7. **Remote** (`ostinato.remote`). Signed heartbeats, 10 a second. Old ones played back are ignored.
 
@@ -97,6 +97,7 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 - Drawn markers, 16 cm, read by a 720p 70 degree camera: facing it, reliably to 6 m when sharp and 5 m when blurred (2 px), with distances off by 1-3% and directions by about 0.001 rad. That is inside what the position estimate assumes (4% and 0.02 rad) to about 4 m. Turned 50 degrees away and blurred, only to about 3 m, and blurred in a dim room, 2 m. Without facings in the setup file, the check counts every marker within 4.9 m as seen, whichever way it faces.
 - With the picture shaking for 4 s after it stopped, the rover held still and began measuring 2 s after the shaking ended. The steadiness check settled on a still, grainy picture and waited out a simulated 10 px wobble.
 - Around a person lying down, with views on both sides: told which way the head is, it came no nearer than 1.24 m to any part of them in 20 drives. Told only where the chest is, it passed 0.15 m from the feet. Give the head direction.
+- Seeing shoulders and hips through the camera, the rover stopped in 10 of 10 drives when the person lay 55 degrees or more from the setup file, head and feet swapped included, and in none up to 35 degrees. The simulated pose points are cleaner than a real pose model's.
 - The board program, on simulated motors 15% weaker than it assumes, held speed within 5% and stopped within about 0.5 s of silence.
 
 ## Still unknown
