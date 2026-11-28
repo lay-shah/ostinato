@@ -46,5 +46,5 @@ The battery goes to A1 through a divider: 10 kΩ from the battery's positive sid
 
 1. Check every connection with the motor power off.
 2. With the emergency stop pressed, power up. The wheels must not move.
-3. Put the rover on a stand with its wheels off the ground, and run `python -m ostinato.bench --port …`. Fix everything it reports. Check the battery voltage it prints against a meter.
+3. Put the rover on a stand with its wheels off the ground, and run `python -m ostinato.bench --port …`. Fix everything it reports. Check the battery voltage it prints against a meter. It also asks you to hold a book in front of each distance sensor in turn, to catch front and rear swapped: the rover drives backwards for part of the way round, so the rear one matters as much.
 4. Run `python -m ostinato.bench --port … --measure` on the floor to find counts per meter. Put that in the setup file, and set `MM_PER_TICK` in the board program to 1000 divided by it.

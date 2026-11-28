@@ -74,6 +74,21 @@ class Bench:
             "in the board program if they differ by more than 0.2 V",
             "the battery is not reported: check the divider into A1",
         )
+        # The rover reverses as well as going forwards, so each sensor must face its own way.
+        for side, other in (("front", "rear"), ("rear", "front")):
+            self.ask(
+                f"Hold a book about 30 cm from the {side} distance sensor, with nothing near the {other}, "
+                "then press Enter here."
+            )
+            heard = self.listen(0.5)
+            r = heard[-1] if heard else self.last
+            near, far = getattr(r, side), getattr(r, other)
+            self.check(
+                near < 0.5 and not far < 0.5,
+                f"the {side} sensor saw it, at {near:.2f} m",
+                f"the {side} sensor read {near:.2f} m and the {other} {far:.2f} m: they may be swapped, "
+                "or one may face the wrong way",
+            )
         self.ask("Press the emergency stop, then press Enter here.")
         self.check(
             any(x.estop for x in self.listen(0.5)),
