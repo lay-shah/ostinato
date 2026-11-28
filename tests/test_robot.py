@@ -12,7 +12,7 @@ import pytest
 from ostinato.breathing import Reading
 from ostinato.localize import Sighting
 from ostinato.motors import seal
-from ostinato.robot import Robot, Setup, main
+from ostinato.robot import LOOKS, Robot, Setup, main
 from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, State, wrap
 
 ROOM = {
@@ -139,6 +139,12 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
             late = [x for x in (cut, estop) if x is not None and t > x + 0.6]
             wrong += bool(turning and late)
             chest = hw.chest(really, setup.lens_height) if measuring and setup.lens_height else None
+            axis = None
+            if chest and "lies" in trouble:  # the real direction to their head, in degrees
+                a = math.radians(trouble["lies"])
+                ends = [(really[0] + k * math.cos(a), really[1] + k * math.sin(a)) for k in (0.2, -0.3)]
+                axis = tuple(hw.chest(p, setup.lens_height) for p in ends)
+                axis = None if None in axis else axis
             # Asking lasts 10 s, as in the app.
             asking = bool(asks) and t - asks[-1] < 10
             raised = asking and hand is not None and t - asks[-1] >= hand
@@ -150,6 +156,7 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
                 asking=asking,
                 chest=chest,
                 shaking=robot.mission.state is State.SETTLING and t < trouble.get("shaking", 0),
+                axis=axis,
             )
             robot.moved_while_shaking = getattr(robot, "moved_while_shaking", False) or (
                 robot.shaking and robot.drive != STOP
@@ -159,7 +166,7 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
             robot.moved_while_asking = getattr(robot, "moved_while_asking", False) or (
                 asking and robot.drive != STOP
             )
-            nearest = min(nearest, math.dist((hw.pose.x, hw.pose.y), setup.person))
+            nearest = min(nearest, setup.body.distance(hw.pose.x, hw.pose.y))
             if robot.mission.state is until or robot.mission.state is State.DONE:
                 break
     finally:
@@ -546,6 +553,19 @@ def test_guard_hears_the_distance_to_the_feet(tmp_path):
     assert ear.heard[0] == pytest.approx(1.2 - 2 * 0.01, abs=0.01) and ear.heard[1]
     loc.tell(ear, 0.0, setup.person)  # as before, the chest alone
     assert ear.heard[0] == pytest.approx(2.3 - 2 * 0.01, abs=0.01)
+
+
+def test_stops_when_the_person_lies_another_way(board_program, tmp_path):
+    lying = setup_with(tmp_path, person=[0, 0, 90], camera={"fov": 70, "pitch": 30, "height": 0.8})
+    for seed in (1, 2, 3):
+        robot, nearest, _ = drive(board_program, lying, seed, until=State.DONE, seconds=120, lies=95)
+        assert robot.person_problem is None and "breaths/min" in robot.mission.outcome
+        assert len(robot.seen_axis) == LOOKS and nearest > KEEP_OUT
+    # Lying across the way the file says: the head may be nearer the rover's path.
+    for seed in (1, 2, 3):
+        robot, _, _ = drive(board_program, lying, seed, until=State.DONE, seconds=120, lies=0)
+        assert robot.person_problem == "the person lies differently from the setup file"
+        assert robot.drive == STOP
 
 
 def test_check_command(tmp_path, capsys):
