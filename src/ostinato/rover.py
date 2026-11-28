@@ -5,6 +5,7 @@ asks for, it enforces the limits and stops when anything goes quiet. It does not
 replace a hardware emergency stop that cuts motor power.
 """
 
+import itertools
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -20,6 +21,7 @@ OBSTACLE = 0.6  # m, stop driving toward anything closer
 KEEP_OUT = 1.0  # m from the person's body, measured to the rover's center
 RING = 1.25  # m from the body: viewpoints and paths lie on this line around the person
 # A person lying down, from the chest: to the top of the head, and to the feet. A tall adult.
+CLEAR = 0.35  # m kept between the rover's middle and the edge of a known obstacle
 HEAD = 0.75  # m
 FEET = 1.1  # m
 SETTLE = 2.0  # seconds still before measuring, for the mast to stop shaking
@@ -201,6 +203,32 @@ def ring_path(pose, person, bearing, long_way=False):
     return [*(body.around(a, out) for a in angles[:-1]), body.around(bearing, RING)]
 
 
+def clearance(points, obstacles):
+    """The least distance from a path, through `points`, to the edge of any obstacle
+    (x, y, radius). Infinite with no obstacles."""
+    least = math.inf
+    for (x0, y0), (x1, y1) in itertools.pairwise(points):
+        dx, dy = x1 - x0, y1 - y0
+        length = dx * dx + dy * dy
+        for ox, oy, radius in obstacles:
+            k = 0.0 if length == 0 else max(0.0, min(1.0, ((ox - x0) * dx + (oy - y0) * dy) / length))
+            least = min(least, math.dist((ox, oy), (x0 + k * dx, y0 + k * dy)) - radius)
+    return least
+
+
+def plan(pose, person, bearing, obstacles=()):
+    """The way round to the viewpoint at `bearing`: the short way, unless it passes a
+    known obstacle and the long way does not. Returns (points, long_way)."""
+    here = [(pose.x, pose.y)]
+    short = ring_path(pose, person, bearing)
+    if clearance(here + short, obstacles) >= CLEAR:
+        return short, False
+    long = ring_path(pose, person, bearing, long_way=True)
+    if clearance(here + long, obstacles) > clearance(here + short, obstacles):
+        return long, True
+    return short, False
+
+
 class State(Enum):
     DRIVING = "driving"
     FACING = "facing the person"
@@ -219,6 +247,7 @@ class Mission:
     assessor: Assessor | None = None
     log: list = field(default_factory=list)
     ask_first: bool = False  # ask the person to raise a hand before leaving each view
+    obstacles: list = field(default_factory=list)  # known ones, as (x, y, radius) in meters
 
     def __post_init__(self):
         if not self.bearings:
@@ -310,7 +339,9 @@ class Mission:
 
     def _drive(self, t, pose, moving):
         if self._path is None:
-            self._path = ring_path(pose, self.body, self.bearings[self.view])
+            self._path, self._long_way = plan(pose, self.body, self.bearings[self.view], self.obstacles)
+            if self._long_way:
+                self.log.append((t, "going the long way round, past a known obstacle", self.view))
             self._progress = t
         if moving:
             self._progress = t

@@ -23,6 +23,10 @@ Each marker is [x, y, facing]: where it is, and the direction its printed side f
 The facing may be left out, as [x, y], but then the check cannot tell whether a marker is
 turned too far from a view to be read.
 
+"obstacles", optional, lists known furniture as [x, y, radius] each, a circle around it.
+The check then counts markers hidden behind one as unseen, and the rover goes the long way
+round when the short way passes one. Things not listed are found by its distance sensors.
+
 "battery_low", in volts, is optional but wise: below it the rover holds its wheels and
 asks for a person. About 3.5 V a cell for a lithium battery, so 10.5 for three cells.
 
@@ -47,7 +51,21 @@ import numpy as np
 from .calibrate import Calibration
 from .localize import MARKER, Camera, Localizer, find_markers, ground, place
 from .motors import Board
-from .rover import KEEP_OUT, RING, STOP, Body, Drive, Guard, Mission, Pose, State, wrap
+from .rover import (
+    CLEAR,
+    KEEP_OUT,
+    RING,
+    STOP,
+    Body,
+    Drive,
+    Guard,
+    Mission,
+    Pose,
+    State,
+    clearance,
+    plan,
+    wrap,
+)
 from .shake import Steadiness
 
 CHEST_HEIGHT = 0.15  # m, the chest of a person lying down, above the floor
@@ -73,6 +91,7 @@ class Setup:
     facings: dict[int, float] = field(default_factory=dict)  # radians, where given
     battery_low: float | None = None  # V; below this the rover holds its wheels
     head: float | None = None  # radians from the chest to the head, for someone lying down
+    obstacles: list = field(default_factory=list)  # known furniture, as (x, y, radius) in meters
 
     @property
     def body(self):
@@ -107,6 +126,7 @@ class Setup:
                 {int(k): math.radians(float(p[2])) for k, p in raw["markers"].items() if len(p) == 3},
                 None if raw.get("battery_low") is None else float(raw["battery_low"]),
                 math.radians(float(raw["person"][2])) if len(raw["person"]) == 3 else None,
+                [tuple(float(v) for v in o) for o in raw.get("obstacles", [])],
             )
             if len(raw["person"]) not in (2, 3):
                 raise ValueError("setup file: person is [x, y] or [x, y, head]")
@@ -115,6 +135,7 @@ class Setup:
             raise ValueError(f"setup file: {error}") from None
         numbers = [setup.track, setup.ticks_per_meter, *setup.person, *setup.views]
         numbers += [] if setup.head is None else [setup.head]
+        numbers += [v for o in setup.obstacles for v in o]
         numbers += [v for p in setup.markers.values() for v in p] + list(setup.facings.values())
         if not all(math.isfinite(v) for v in numbers):
             raise ValueError("setup file: every number must be finite")
@@ -122,6 +143,8 @@ class Setup:
             raise ValueError("setup file: check track, ticks_per_meter, and person")
         if not setup.views or not setup.markers or any(n not in (2, 3) for n in sizes):
             raise ValueError("setup file: needs views and at least one marker at [x, y, facing]")
+        if any(len(o) != 3 or not 0.05 <= o[2] <= 3 for o in setup.obstacles):
+            raise ValueError("setup file: each obstacle is [x, y, radius], radius 0.05 to 3 m")
         if setup.battery_low is not None and not 3 <= setup.battery_low <= 50:
             raise ValueError("setup file: battery_low must be 3 to 50 V")
         if setup.lens_height is not None and not 0.2 <= setup.lens_height <= 2:
@@ -168,6 +191,7 @@ def check_setup(setup):
             for n, (mx, my) in setup.markers.items()
             if 0.5 < math.dist((x, y), (mx, my)) < reach(n, x, y)
             and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
+            and clearance([(x, y), (mx, my)], setup.obstacles) > 0  # not hidden behind one
         ]
         if seen:
             warnings += (
@@ -194,6 +218,18 @@ def check_setup(setup):
             f"marker{'s' if len(unknown) > 1 else ''} {', '.join(map(str, unknown))} "
             "without a facing; one turned more than 45 degrees from a view may be missed"
         )
+    for i, bearing in enumerate(setup.views, 1):
+        x, y = body.around(bearing, RING)
+        if clearance([(x, y), (x, y)], setup.obstacles) < CLEAR:
+            errors.append(f"view {i} is too near an obstacle: it needs {CLEAR} m from its edge")
+    where = setup.start
+    for i, bearing in enumerate(setup.views, 1):
+        path, long_way = plan(where, body, bearing, setup.obstacles)
+        if clearance([(where.x, where.y), *path], setup.obstacles) < CLEAR:
+            errors.append(f"the way to view {i} passes an obstacle whichever way round it goes")
+        elif long_way:
+            warnings.append(f"the short way to view {i} passes an obstacle, so it will go the long way round")
+        where = Pose(*path[-1], 0.0)
     for a, b in zip(setup.views, setup.views[1:]):
         if abs(wrap(a - b)) < math.radians(20):
             warnings.append("two views are within 20 degrees of each other and see much the same")
@@ -215,7 +251,7 @@ class Robot:
         self.board = Board(port, setup.track)
         self.guard = guard or Guard()
         self.localizer = Localizer(setup.start, setup.markers, setup.track)
-        self.mission = Mission(setup.body, list(setup.views), ask_first=ask)
+        self.mission = Mission(setup.body, list(setup.views), ask_first=ask, obstacles=setup.obstacles)
         self.drive, self.moving, self.shaking = STOP, False, False
         self._frames = deque(maxlen=31)  # times of the last pictures
         self._last = None

@@ -114,6 +114,7 @@ def simulate(
     body=None,
     truth=None,
     start=None,
+    known=(),
 ):
     """Run a mission and check the rules at every step."""
     rng = np.random.default_rng(seed)
@@ -121,7 +122,8 @@ def simulate(
     lying = body or rover.Body((0.0, 0.0))
     start = lying.around(a, r)
     base = SimulatedBase(Pose(*start, rng.uniform(-3, 3)), lying, rng, obstacles)
-    guard, mission, drive, t = Guard(), Mission(body or (0.0, 0.0), list(bearings)), STOP, 0.0
+    mission = Mission(body or (0.0, 0.0), list(bearings), obstacles=list(known))
+    guard, drive, t = Guard(), STOP, 0.0
     closest = math.inf
     while mission.state is not State.DONE and t < seconds:
         if cut is None or not cut[0] <= t <= cut[1]:
@@ -283,3 +285,20 @@ def test_blocked_the_short_way_it_goes_round_the_other_side():
     # Unblocked, it takes the short way.
     mission, _, _ = simulate(2090, bearings=(0.0,), start=(1.4, 2.2))
     assert "going round the other way" not in [state for _, state, _ in mission.log]
+
+
+def test_a_known_obstacle_is_avoided_from_the_start():
+    box = [(rover.RING * math.cos(0.7), rover.RING * math.sin(0.7), 0.2)]
+    for seed in range(2090, 2095):
+        mission, closest, _t = simulate(seed, box, bearings=(0.0,), start=(1.4, 2.2), known=box)
+        states = [state for _, state, _ in mission.log]
+        assert "going the long way round, past a known obstacle" in states
+        assert "going round the other way" not in states  # it never had to stop for it
+        assert mission.outcome == "15.0 breaths/min" and closest >= KEEP_OUT
+
+
+def test_clearance():
+    assert rover.clearance([(0, 0), (2, 0)], []) == math.inf
+    assert rover.clearance([(0, 0), (2, 0)], [(1, 1, 0.5)]) == pytest.approx(0.5)
+    assert rover.clearance([(0, 0), (2, 0)], [(3, 0, 0.5)]) == pytest.approx(0.5)
+    assert rover.clearance([(0, 0), (2, 0)], [(1, 0.2, 0.5)]) < 0

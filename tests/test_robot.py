@@ -593,6 +593,36 @@ def test_stops_when_the_person_lies_another_way(board_program, tmp_path):
         assert robot.drive == STOP
 
 
+def test_setup_check_knows_the_furniture(tmp_path):
+    from ostinato.robot import check_setup
+
+    example = json.loads((Path(__file__).parent.parent / "docs" / "room.example.json").read_text())
+
+    def check(obstacles, **change):
+        path = tmp_path / "room.json"
+        path.write_text(json.dumps({**example, "obstacles": obstacles, **change}))
+        return check_setup(Setup.load(path))
+
+    assert check([]) == ([], [])
+    # A sofa between view 1 and both its markers hides them.
+    errors, _ = check([[-1.6, -0.33, 0.7]])
+    assert any("view 1 sees no marker" in e for e in errors)
+    # A table where view 2 should be.
+    errors, _ = check([[-1.3, 0.8, 0.3]])
+    assert any("view 2 is too near an obstacle" in e for e in errors)
+    # Starting below the feet, a box on the short way up to view 1: it goes round the other side.
+    below = {"start": [1.5, -2.2, 90]}
+    assert check([], **below) == ([], [])
+    errors, warnings = check([[1.3, -0.6, 0.15]], **below)
+    assert errors == [] and any("short way to view 1 passes an obstacle" in w for w in warnings)
+    # Boxes on both ways round.
+    errors, _ = check([[1.3, -0.6, 0.15], [-1.3, -0.3, 0.15]], **below)
+    assert any("way to view 1 passes an obstacle whichever way" in e for e in errors)
+    for bad in ([[0, 0]], [[0, 0, 0]], [[0, 0, 1e400]]):
+        with pytest.raises(ValueError, match="setup file"):
+            check(bad)
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))

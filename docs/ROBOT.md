@@ -74,7 +74,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `python -m ostinato.marker_range`, also `--blur 2 --light 0.3 --noise 10` | How far a drawn marker is read, sharp or blurred, lit or dim, and how far off |
 | `python -m ostinato.calibrate --print`, then `--square 25` | Measures the camera's lens with a printed board |
 | `python -m ostinato.bench --port …` | First power-on checks, wheels off the ground; `--measure` finds counts per meter |
-| `python -m ostinato.robot --setup room.json --check` | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path |
+| `python -m ostinato.robot --setup room.json --check` | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path, furniture in the way or hiding a marker |
 | `python -m ostinato.remote --make-key key.txt` | Makes the key shared by the remote and the rover |
 | `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
 | `python -m ostinato.remote --robot <address> --key key.txt` | The operator's window: G lets it move, Space stops it |
