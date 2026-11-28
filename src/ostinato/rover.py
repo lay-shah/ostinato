@@ -135,14 +135,23 @@ class Pose:
     heading: float
 
 
-def steer(pose, target):
-    """Turn toward a point, then drive to it."""
+def steer(pose, target, reverse=False):
+    """Turn toward a point, then drive to it, backwards if `reverse`."""
     dx, dy = target[0] - pose.x, target[1] - pose.y
     distance = math.hypot(dx, dy)
-    error = wrap(math.atan2(dy, dx) - pose.heading)
+    error = wrap(math.atan2(dy, dx) - pose.heading - (math.pi if reverse else 0.0))
     if abs(error) > 0.35:
         return Drive(0.0, math.copysign(min(MAX_TURN, 2 * abs(error)), error))
-    return Drive(min(MAX_SPEED, distance) * math.cos(error), 2 * error)
+    return Drive(min(MAX_SPEED, distance) * math.cos(error) * (-1 if reverse else 1), 2 * error)
+
+
+def clockwise(center, here, there):
+    """Whether going from `here` to `there` goes clockwise round `center`, clearly: more
+    than 30 degrees from straight toward or away from it."""
+    ax, ay = here[0] - center[0], here[1] - center[1]
+    bx, by = there[0] - here[0], there[1] - here[1]
+    size = math.hypot(ax, ay) * math.hypot(bx, by)
+    return size > 0 and (ax * by - ay * bx) / size < -0.5
 
 
 @dataclass(frozen=True)
@@ -371,7 +380,13 @@ class Mission:
         while self._path:
             near = ARRIVED if len(self._path) == 1 else 0.12
             if math.dist((pose.x, pose.y), self._path[0]) > near:
-                return steer(pose, self._path[0])
+                # The camera looks left. Going round clockwise, backwards keeps it on the
+                # person and the markers beyond them, instead of on the walls.
+                # Decided once for each point, so that small drift cannot flip it.
+                if getattr(self, "_back_for", (None,))[0] != self._path[0]:
+                    back = len(self._path) > 1 and clockwise(self.person, (pose.x, pose.y), self._path[0])
+                    self._back_for = (self._path[0], back)
+                return steer(pose, self._path[0], reverse=self._back_for[1])
             self._path.pop(0)
         self._go(t, State.FACING)
         return STOP
