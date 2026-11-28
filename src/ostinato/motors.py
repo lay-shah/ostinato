@@ -3,7 +3,8 @@
 No board exists yet. `firmware/motor_guard.h` is the matching code for the board.
 Commands: `D,<seq>,<left mm/s>,<right mm/s>*<CRC>`.
 Reports: `T,<ms>,<left ticks>,<right ticks>,<front mm>,<rear mm>,<state>,<battery mV>*<CRC>`.
-The state is 0 waiting for a stop, 1 ready, or 2 emergency stop pressed. Reports from
+The state is 0 waiting for a stop, 1 ready, 2 emergency stop pressed, or 3 battery
+below the board's own cutoff, which holds until the board restarts. Reports from
 before the battery was added, without it, are still read.
 """
 
@@ -41,6 +42,7 @@ class Report:
     armed: bool
     estop: bool = False
     battery: float = math.nan  # V, NaN when not reported
+    cutoff: bool = False  # the board stopped the motors for a flat battery
 
 
 def parse(line):
@@ -61,14 +63,14 @@ def parse(line):
         or len(numbers) not in (6, 7)
         or ms < 0
         or min(front, rear) < SILENT
-        or state not in (0, 1, 2)
+        or state not in (0, 1, 2, 3)
     ):
         return None
     if battery and not 0 <= battery[0] <= MAX_BATTERY:
         return None
     front, rear = (math.nan if v == SILENT else v / 1000 for v in (front, rear))
     volts = battery[0] / 1000 if battery and battery[0] > 0 else math.nan
-    return Report(ms, left, right, front, rear, state == 1, state == 2, volts)
+    return Report(ms, left, right, front, rear, state == 1, state == 2, volts, state == 3)
 
 
 class Board:

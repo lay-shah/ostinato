@@ -59,7 +59,7 @@ About $470-725 in total. The 27 cm comes from `python -m ostinato.tipping` with 
 Each layer stops the wheels on its own, so one failing does not move the rover.
 
 1. **Emergency stop switch.** One pole cuts motor power directly. The other tells the board, wired so that a cut wire reads as pressed. See [WIRING.md](WIRING.md).
-2. **Motor board** (`firmware/ostinato_board`). Stops after 0.5 s without a good command, ignores damaged or repeated commands, waits for a stop command after any halt, and cuts off a wheel that is pushed but does not turn for a second. Wheel speeds above 450 mm/s are refused.
+2. **Motor board** (`firmware/ostinato_board`). Stops after 0.5 s without a good command, ignores damaged or repeated commands, waits for a stop command after any halt, cuts off a wheel that is pushed but does not turn for a second, and stops for good, until it is restarted, when the battery stays below its own cutoff for a second, even with the computer gone. Wheel speeds above 450 mm/s are refused.
 3. **Guard** (`ostinato.rover`). Every command passes through it. It limits speed and acceleration, keeps 1 m from the person (from the whole body when the setup file says which way they lie), stops for obstacles, and stops when the remote, a sensor, the position estimate, or its own loop goes quiet for 0.5 s. Turning on the spot is the only movement allowed without knowing how far away the person is. An emergency stop holds until the operator clears it.
 4. **Position** (`ostinato.localize`). When it is unsure where it is, it says nothing to the guard, so the rover stops. It may first turn once around in place to find a marker.
 5. **Person check.** With the camera's height in the setup file, it stops if the person is more than 0.25 m from where the file says, or was not seen in place before it leaves a viewpoint. With the head direction too, it stops if their shoulders and hips show them lying more than 45 degrees from it, head and feet swapped included.
@@ -75,6 +75,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `python -m ostinato.calibrate --print`, then `--square 25` | Measures the camera's lens with a printed board |
 | `python -m ostinato.bench --port …` | First power-on checks, wheels off the ground; `--measure` finds counts per meter |
 | `python -m ostinato.robot --setup room.json --check` | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path, furniture in the way or hiding a marker |
+| `python -m ostinato.robot --setup room.json --rehearse 1` | No board needed: stand a webcam where view 1 is and compare what it sees, markers, the person, and which way they lie, with the setup file. 0 is the start |
 | `python -m ostinato.remote --make-key key.txt` | Makes the key shared by the remote and the rover |
 | `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
 | `python -m ostinato.remote --robot <address> --key key.txt` | The operator's window: G lets it move, Space stops it |
