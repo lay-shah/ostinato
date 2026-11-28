@@ -165,6 +165,19 @@ def marker_reach(setup, n, x, y):
     return min(sees, TURNED_RANGE) if turn > TURNED else sees
 
 
+def visible_markers(setup, x, y, facing):
+    """Markers the camera reads from (x, y), looking toward `facing` (radians): in the
+    picture, near enough for the way each faces, and not hidden behind furniture."""
+    half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
+    return [
+        n
+        for n, (mx, my) in setup.markers.items()
+        if 0.5 < math.dist((x, y), (mx, my)) < marker_reach(setup, n, x, y)
+        and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
+        and clearance([(x, y), (mx, my)], setup.obstacles) > 0
+    ]
+
+
 def check_setup(setup):
     """Problems with a setup file, before driving. Returns (errors, warnings)."""
     errors, warnings = [], []
@@ -173,20 +186,9 @@ def check_setup(setup):
     gap = body.distance(setup.start.x, setup.start.y)
     if gap < RING:
         errors.append(f"the start is {gap:.2f} m from the person; it must be at least {RING} m away")
-    half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
-
-    def reach(n, x, y):
-        return marker_reach(setup, n, x, y)
 
     def visible(x, y, facing):
-        """Markers the camera reads from (x, y), looking toward `facing`."""
-        return [
-            n
-            for n, (mx, my) in setup.markers.items()
-            if 0.5 < math.dist((x, y), (mx, my)) < reach(n, x, y)
-            and abs(wrap(math.atan2(my - y, mx - x) - facing)) < half
-            and clearance([(x, y), (mx, my)], setup.obstacles) > 0  # not hidden behind one
-        ]
+        return visible_markers(setup, x, y, facing)
 
     start = setup.start
     if not visible(start.x, start.y, start.heading + math.radians(setup.camera.pan)):

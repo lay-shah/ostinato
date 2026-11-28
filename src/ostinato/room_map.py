@@ -81,11 +81,15 @@ def draw(setup, problems=(), notes=()):
         where = type(where)(*path[-1], 0.0)
     d.line(route, fill=BLUE, width=2)
 
-    # Each view, with what its camera takes in.
+    # Each view, with what its camera takes in, and a line to each marker it can read.
+    from .setup_file import visible_markers
+
     half = math.radians(setup.camera.fov) / 2
     for i, bearing in enumerate(setup.views, 1):
         x, y = setup.body.around(bearing, RING)
         facing = math.atan2(setup.person[1] - y, setup.person[0] - x)
+        for n in visible_markers(setup, x, y, facing):
+            d.line([at(x, y), at(*setup.markers[n])], fill=GREEN, width=1)
         for side in (-half, half):
             end = at(x + 2.5 * math.cos(facing + side), y + 2.5 * math.sin(facing + side))
             d.line([at(x, y), end], fill=GREY)
@@ -113,7 +117,8 @@ def draw(setup, problems=(), notes=()):
 
     key = "From above. Blue: the way round. Orange: 1 m from the person. Grey: furniture."
     d.text((12, height + 12), key, font=font(15), fill=DIM)
-    d.text((12, height + 36), "Arrows: the way each marker and the start face.", font=font(15), fill=DIM)
+    legend = "Arrows: the way each marker and the start face. Green: markers each view can read."
+    d.text((12, height + 36), legend, font=font(15), fill=DIM)
     for i, (text, color) in enumerate(lines):
         d.text((12, height + 64 + 26 * i), text, font=font(15), fill=color)
     return image
