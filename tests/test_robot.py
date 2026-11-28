@@ -720,6 +720,31 @@ def test_says_when_the_board_cut_the_motors_for_the_battery(setup):
     assert robot.status().startswith("stopped: the board stopped the motors") and robot.drive == STOP
 
 
+def test_map_of_the_setup(tmp_path, capsys):
+    from PIL import Image
+
+    from ostinato import room_map
+
+    example = Path(__file__).parent.parent / "docs" / "room.example.json"
+    picture = tmp_path / "room.png"
+    main(["--setup", str(example), "--check", "--map", str(picture)])
+    assert "Map saved" in capsys.readouterr().out
+    image = Image.open(picture).convert("RGB")
+    setup = Setup.load(example)
+    left, _, right, top = room_map.bounds(setup)
+    scale = room_map.SIZE / (right - left)
+    # The chest is drawn where the file says.
+    chest = image.getpixel((round((0 - left) * scale), round((top - 0) * scale)))
+    assert chest == (186, 140, 104)
+    # Problems are listed below it; the picture grows to fit them.
+    taller = room_map.draw(setup, ["one", "two"], ["three"])
+    assert taller.height == image.height + 3 * 26
+    with pytest.raises(SystemExit):
+        main(["--setup", str(example), "--check", "--map", str(picture)])  # never overwrites
+    with pytest.raises(SystemExit):
+        main(["--setup", str(example), "--map", str(tmp_path / "other.png")])  # only with --check
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
