@@ -773,6 +773,13 @@ def test_map_of_the_setup(tmp_path, capsys):
     # The chest is drawn where the file says.
     chest = image.getpixel((round((0 - left) * scale), round((top - 0) * scale)))
     assert chest == (186, 140, 104)
+    # A green line from each view to each marker it can read.
+    from ostinato.setup_file import visible_markers
+    from ostinato.ui import GREEN
+
+    x, y = setup.body.around(setup.views[0], 1.25)
+    assert sorted(visible_markers(setup, x, y, math.atan2(-y, -x))) == [1, 2]
+    assert GREEN in {color for _, color in image.getcolors(1 << 20)}
     # Problems are listed below it; the picture grows to fit them.
     taller = room_map.draw(setup, ["one", "two"], ["three"])
     assert taller.height == image.height + 3 * 26
