@@ -285,6 +285,8 @@ class Robot:
         for report in self.board.receive(t, self.guard):
             last, self._last = self._last, report
             self._check_battery(t, report.battery)
+            if report.cutoff and not self.battery_problem:
+                self.battery_problem = "the board stopped the motors: the battery is below its cutoff"
             if last is None:
                 continue
             if report.ms < last.ms:
@@ -453,6 +455,103 @@ class Robot:
         return "; ".join(parts)
 
 
+def view_pose(setup, view):
+    """Where the rover stands, and faces, at a viewpoint (1, 2, ...), or at the start (0)."""
+    if view == 0:
+        return setup.start
+    if not 1 <= view <= len(setup.views):
+        raise ValueError(f"the setup file has views 1 to {len(setup.views)}")
+    x, y = setup.body.around(setup.views[view - 1], RING)
+    toward = math.atan2(setup.person[1] - y, setup.person[0] - x)
+    return Pose(x, y, wrap(toward - math.radians(setup.camera.pan)))
+
+
+def rehearsal(setup, pose, sightings, chest=None, axis=None):
+    """Lines comparing what the camera sees, standing at `pose`, with the setup file."""
+    cam = setup.camera
+    half = math.radians(cam.fov) / 2
+    lines = []
+    seen = {s.marker: s for s in sightings}
+    for n, (mx, my) in sorted(setup.markers.items()):
+        distance = math.dist((pose.x, pose.y), (mx, my))
+        bearing = wrap(math.atan2(my - pose.y, mx - pose.x) - pose.heading)
+        across = math.degrees(wrap(bearing - math.radians(cam.pan)))
+        expected = f"{distance:.2f} m, {abs(across):.0f} degrees {'left' if across > 0 else 'right'}"
+        if n in seen:
+            s = seen[n]
+            off = math.degrees(wrap(s.bearing - bearing))
+            lines.append(
+                f"marker {n}: {s.distance:.2f} m, expected {expected}; "
+                f"{round(100 * (s.distance - distance) / distance):+d}% and {round(off):+d} degrees off"
+            )
+        elif abs(across) < math.degrees(half):
+            lines.append(f"marker {n}: not seen, expected at {expected}")
+    for n in sorted(set(seen) - set(setup.markers)):
+        lines.append(f"marker {n}: seen, but not in the setup file")
+    if setup.lens_height is None:
+        lines.append("person: give the camera height in the setup file to check where they are")
+    elif chest is None:
+        lines.append("person: not seen")
+    else:
+        found = ground(cam, chest, setup.lens_height - CHEST_HEIGHT)
+        if found is None:
+            lines.append("person: seen, but too far up the picture to place")
+        else:
+            x, y = place(pose, found)
+            off = math.dist((x, y), setup.person)
+            verdict = "" if off <= MOVED else f"; more than {MOVED} m, so the rover would stop"
+            lines.append(
+                f"person: chest {found.distance:.2f} m away, {off:.2f} m from where the file says{verdict}"
+            )
+            if setup.head is not None and axis is not None:
+                ends = [ground(cam, p, setup.lens_height - CHEST_HEIGHT) for p in axis]
+                if None not in ends:
+                    (sx, sy), (hx, hy) = (place(pose, e) for e in ends)
+                    lies = math.atan2(sy - hy, sx - hx)
+                    turn = math.degrees(wrap(lies - setup.head))
+                    lines.append(f"lying: {round(turn):+d} degrees from the file")
+    return lines
+
+
+def rehearse(setup, view, camera, finder, clock=time.monotonic, show=None):
+    """Watch through the camera, standing where the rover would. Nothing moves."""
+    import cv2
+
+    from .shake import Steadiness
+
+    pose, steady, frames, printed = view_pose(setup, view), Steadiness(), deque(maxlen=31), None
+    where = "the start" if view == 0 else f"view {view}"
+    print(
+        f"Stand the camera at {where}: ({pose.x:.2f}, {pose.y:.2f}) m, facing so the person is in the middle."
+    )
+    print("Nothing moves. Q quits.\n", flush=True)
+    while True:
+        ok, frame = camera.read()
+        if not ok or frame.shape[:2] != (setup.camera.height, setup.camera.width):
+            print("The camera stopped or gives the wrong size.")
+            return
+        t = clock()
+        frames.append(t)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        still = steady.update(t, gray)
+        small = cv2.resize(
+            frame, (640, round(640 * frame.shape[0] / frame.shape[1])), interpolation=cv2.INTER_AREA
+        )
+        chest = axis = None
+        if finder(small) is not None:
+            points = finder.points * (frame.shape[1] / 640)
+            chest = tuple(points.mean(axis=0))
+            axis = (tuple(points[:2].mean(axis=0)), tuple(points[2:].mean(axis=0)))
+        if printed is None or t - printed >= 1.0:
+            printed = t
+            rate = (len(frames) - 1) / (frames[-1] - frames[0]) if frames[-1] > frames[0] else 0.0
+            state = {True: "still", False: "moving", None: "too plain to tell if still"}[still]
+            lines = rehearsal(setup, pose, find_markers(gray, setup.camera), chest, axis)
+            print("\n".join([f"{rate:.0f} pictures/s, picture {state}", *lines]) + "\n", flush=True)
+        if show and show(frame):
+            return
+
+
 def summarize(path, setup):
     """A few lines about a saved run."""
     rows = []
@@ -487,6 +586,11 @@ def summarize(path, setup):
     if shook:
         each = ", ".join(f"view {view + 1} {count / 2:.1f} s" for view, count in sorted(shook.items()))
         lines.append(f"Waited for the camera to stop shaking: {each}")
+    volts = [r["battery"] for r in rows if r.get("battery")]  # older logs have none
+    if volts:
+        lines.append(
+            f"Battery: {volts[0]:.1f} V at the start, {volts[-1]:.1f} V at the end, lowest {min(volts):.1f} V."
+        )
     rates = [r["fps"] for r in rows if r.get("fps")]  # older logs have none
     if rates:
         slow = sum(rate < MIN_FPS for rate in rates)
@@ -540,6 +644,12 @@ def main(argv=None):
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--no-prompt", action="store_true", help="never ask the person to raise a hand")
     parser.add_argument("--key", type=Path, help="key file shared with `python -m ostinato.remote`")
+    parser.add_argument(
+        "--rehearse",
+        type=int,
+        metavar="VIEW",
+        help="no board: compare what the camera sees with the setup file, at view VIEW (0 is the start)",
+    )
     args = parser.parse_args(argv)
     from .remote import Listener, load_key
 
@@ -562,8 +672,34 @@ def main(argv=None):
         if errors:
             parser.exit(1)
         return
+    if args.rehearse is not None:
+        try:
+            setup = Setup.load(args.setup)
+            view_pose(setup, args.rehearse)
+        except ValueError as error:
+            parser.exit(1, f"{error}\n")
+        camera = open_camera(args.camera)
+        if camera is None:
+            parser.exit(1, "Could not open the camera.\n")
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, setup.camera.width)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, setup.camera.height)
+        finder = PoseFinder()
+
+        def show(frame):
+            cv2.imshow("Ostinato rehearsal", frame)
+            return cv2.waitKey(1) & 0xFF == ord("q")
+
+        try:
+            rehearse(setup, args.rehearse, camera, finder, show=show)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            finder.close()
+            camera.release()
+            cv2.destroyAllWindows()
+        return
     if not args.port:
-        parser.error("--port is needed, except with --check or --replay")
+        parser.error("--port is needed, except with --check, --replay, or --rehearse")
     log = None
     if args.log:
         try:

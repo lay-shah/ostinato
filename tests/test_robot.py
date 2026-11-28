@@ -623,6 +623,100 @@ def test_setup_check_knows_the_furniture(tmp_path):
             check(bad)
 
 
+def pixel_of(setup, pose, x, y):
+    """Where a point on the person's chest height appears, from `pose`."""
+    from test_localize import project
+
+    from ostinato.robot import CHEST_HEIGHT
+
+    look = pose.heading + math.radians(setup.camera.pan)
+    dx, dy = x - pose.x, y - pose.y
+    ahead = dx * math.cos(look) + dy * math.sin(look)
+    right = dx * math.sin(look) - dy * math.cos(look)
+    return project(setup.camera, right, ahead, setup.lens_height - CHEST_HEIGHT)
+
+
+def test_rehearsal_compares_the_picture_with_the_file(tmp_path):
+    from ostinato.localize import Sighting
+    from ostinato.robot import rehearsal, view_pose
+
+    setup = Setup.load(Path(__file__).parent.parent / "docs" / "room.example.json")
+    pose = view_pose(setup, 1)
+    # The camera, looking left, faces the chest.
+    toward = math.atan2(-pose.y, -pose.x)
+    assert wrap(toward - pose.heading) == pytest.approx(math.radians(setup.camera.pan))
+    assert setup.body.distance(pose.x, pose.y) == pytest.approx(1.25, abs=1e-6)
+    # Marker 2 seen exactly where expected, 1 seen 10% too far; 9 is not in the file.
+    expect = {}
+    for n in (1, 2):
+        mx, my = setup.markers[n]
+        expect[n] = Sighting(
+            n,
+            math.dist((pose.x, pose.y), (mx, my)),
+            wrap(math.atan2(my - pose.y, mx - pose.x) - pose.heading),
+        )
+    seen = [expect[2], Sighting(1, expect[1].distance * 1.1, expect[1].bearing), Sighting(9, 2.0, 1.5)]
+    chest = pixel_of(setup, pose, 0.0, 0.1)
+    shoulders, hips = pixel_of(setup, pose, 0.0, 0.2), pixel_of(setup, pose, 0.0, -0.3)
+    lines = rehearsal(setup, pose, seen, chest, (shoulders, hips))
+    text = "\n".join(lines)
+    by_marker = {line.split(":")[0]: line for line in lines}
+    assert "+0% and +0 degrees off" in by_marker["marker 2"]
+    assert "+10% and +0 degrees off" in by_marker["marker 1"]
+    assert "marker 9: seen, but not in the setup file" in text
+    assert "0.10 m from where the file says" in text and "rover would stop" not in text
+    assert "lying: +0 degrees from the file" in text
+    # Nothing seen: markers in view are missed, the person is not seen.
+    lines = rehearsal(setup, pose, [])
+    assert (
+        any(line.startswith("marker 1: not seen, expected at") for line in lines)
+        and "person: not seen" in lines
+    )
+    far = rehearsal(setup, pose, [], pixel_of(setup, pose, 0.5, 0.0))
+    assert any("more than 0.25 m, so the rover would stop" in line for line in far)
+    with pytest.raises(ValueError):
+        view_pose(setup, 3)
+    assert view_pose(setup, 0) == setup.start
+
+
+def test_rehearse_command(monkeypatch, capsys, tmp_path):
+    import cv2
+
+    from ostinato import app, chest, robot
+
+    monkeypatch.setattr(chest, "PoseFinder", Finder)
+    monkeypatch.setattr(app, "open_camera", lambda index: Camera(70, each=lambda n: time.sleep(0.02)))
+    for name in ("imshow", "destroyAllWindows"):
+        monkeypatch.setattr(cv2, name, lambda *a: None)
+    monkeypatch.setattr(cv2, "waitKey", lambda ms: 255)
+    example = str(Path(__file__).parent.parent / "docs" / "room.example.json")
+    robot.main(["--setup", example, "--rehearse", "2"])
+    out = capsys.readouterr().out
+    assert "Stand the camera at view 2" in out and "Nothing moves" in out
+    assert "pictures/s, picture" in out and "person: not seen" in out
+    assert "The camera stopped" in out  # the fake camera runs out
+    with pytest.raises(SystemExit):
+        robot.main(["--setup", example, "--rehearse", "5"])
+
+
+def test_says_when_the_board_cut_the_motors_for_the_battery(setup):
+    class Board:
+        def __init__(self):
+            self.lines = [seal(f"T,{50 * i},0,0,3000,3000,{3 if i > 2 else 1},9400") for i in range(5)]
+
+        def write(self, data):
+            pass
+
+        def read(self):
+            return self.lines.pop(0) if self.lines else b""
+
+    robot = Robot(setup, Board())
+    for i in range(5):
+        robot.step(i * 0.05)
+    assert robot.battery_problem == "the board stopped the motors: the battery is below its cutoff"
+    assert robot.status().startswith("stopped: the board stopped the motors") and robot.drive == STOP
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
@@ -716,6 +810,12 @@ def test_replay_summary(tmp_path):
     path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *timed]))
     text = summarize(path, setup_with(tmp_path))
     assert "Pictures a second: typically 15, lowest 6." in text
+    assert "Battery" not in text  # none in this log
+    charged = [{**r, "battery": v} for r, v in zip(timed, (12.4, 12.3, 11.6, 12.1, 12.0, 11.9, 11.9, 11.8))]
+    path.write_text("\n".join(json.dumps(r) for r in [*rows[:2], *charged]))
+    assert "Battery: 12.4 V at the start, 11.8 V at the end, lowest 11.6 V." in summarize(
+        path, setup_with(tmp_path)
+    )
     assert "Below 10 a second for 1.0 s, 0.5 s of it while measuring." in text
     path.write_text("{broken")
     with pytest.raises(ValueError):

@@ -77,6 +77,33 @@ def test_reports_the_battery(board):
     assert reports[-1].battery == pytest.approx(11.1, abs=0.05)
 
 
+def timed(*events):
+    """Events in time order, as the simulated board reads them."""
+    return sorted(events, key=lambda e: e[0])
+
+
+def test_cuts_the_motors_on_a_flat_battery_until_restarted(board):
+    drive = commands(70, 5000, 200, 200)
+    reports, speeds = board(timed(*READY, *drive, (2000, "V 9300"), (5000, "F 900")))
+    assert speeds[1950][0] > 150  # driving before
+    # Not at once, in case it is a dip, but within about a second, and for good.
+    assert speeds[2500][0] > 100
+    assert all(abs(speeds[ms][0]) < 5 for ms in range(3400, 5000, 50))
+    cut = [r for r in reports if r.cutoff]
+    assert cut and cut[0].ms > 2900 and not any(r.armed for r in cut)
+    # The battery recovering, as it does with no load, does not start it again.
+    reports, speeds = board(timed(*READY, *drive, (2000, "V 9300"), (3200, "V 11500"), (5000, "F 900")))
+    assert all(abs(speeds[ms][0]) < 5 for ms in range(3400, 5000, 50)) and reports[-1].cutoff
+
+
+def test_a_short_dip_or_no_divider_does_not_cut(board):
+    drive = commands(70, 4000, 200, 200)
+    _, speeds = board(timed(*READY, *drive, (2000, "V 9000"), (2600, "V 11500"), (4000, "F 900")))
+    assert speeds[3900][0] > 150
+    _, speeds = board(timed(*READY, *drive, (1000, "V 0"), (4000, "F 900")))
+    assert speeds[3900][0] > 150
+
+
 def test_stops_soon_after_commands_stop(board):
     reports, speeds = board([*READY, *commands(70, 2000, 250, 250), (3500, "F 900")])
     assert speeds[2000][0] > 200
