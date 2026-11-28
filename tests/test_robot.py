@@ -822,6 +822,30 @@ def test_backing_into_something_unlisted_it_stops_and_goes_the_other_way(board_p
         assert robot.boxes > 0.3  # stopped well short of it
 
 
+def test_rehearse_every_view_in_turn(monkeypatch, capsys):
+    import cv2
+
+    from ostinato import app, chest, robot
+
+    monkeypatch.setattr(chest, "PoseFinder", Finder)
+    monkeypatch.setattr(app, "open_camera", lambda index: Camera(200, each=lambda n: time.sleep(0.005)))
+    for name in ("imshow", "destroyAllWindows"):
+        monkeypatch.setattr(cv2, name, lambda *a: None)
+    presses = iter([255] * 30 + [ord("n")] + [255] * 30 + [ord("n")] + [255] * 30 + [ord("q")])
+    monkeypatch.setattr(cv2, "waitKey", lambda ms: next(presses, 255))
+    example = str(Path(__file__).parent.parent / "docs" / "room.example.json")
+    robot.main(["--setup", example, "--rehearse", "all"])
+    out = capsys.readouterr().out
+    for where in ("the start", "view 1", "view 2"):
+        assert f"Stand the camera at {where}" in out
+    assert "N goes to the next place" in out
+    summary = out.split("Summary, as last seen:")[1]
+    assert "  start: " in summary and "  view 1: " in summary and "  view 2: " in summary
+    for bad in ("x", "7"):
+        with pytest.raises(SystemExit):
+            robot.main(["--setup", example, "--rehearse", bad])
+
+
 def test_check_command(tmp_path, capsys):
     good = tmp_path / "good.json"
     good.write_text(json.dumps(ROOM))
