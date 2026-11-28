@@ -12,8 +12,8 @@ import pytest
 from ostinato.breathing import Reading
 from ostinato.localize import Sighting
 from ostinato.motors import seal
-from ostinato.robot import LOOKS, Robot, Setup, main
-from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, State, wrap
+from ostinato.robot import LOOKS, Robot, Setup, check_setup, main
+from ostinato.rover import KEEP_OUT, STOP, Drive, Pose, State, clearance, wrap
 
 ROOM = {
     "track": 0.27,
@@ -167,6 +167,10 @@ def drive(program, setup, seed, until=State.MEASURING, seconds=200, **trouble):
                 asking and robot.drive != STOP
             )
             nearest = min(nearest, setup.body.distance(hw.pose.x, hw.pose.y))
+            robot.furniture = min(  # nearest to the edge of any furniture
+                getattr(robot, "furniture", math.inf),
+                clearance([(hw.pose.x, hw.pose.y)] * 2, setup.obstacles),
+            )
             if robot.mission.state is until or robot.mission.state is State.DONE:
                 break
     finally:
@@ -618,6 +622,8 @@ def test_setup_check_knows_the_furniture(tmp_path):
     assert check([], **below) == ([], [])
     errors, warnings = check([[1.3, -0.6, 0.15]], **below)
     assert errors == [] and any("short way to view 1 passes an obstacle" in w for w in warnings)
+    # Clockwise, the camera faces away from the person, at walls with no markers.
+    assert any("4.5 m with no marker in view" in w for w in warnings)
     # Boxes on both ways round.
     errors, _ = check([[1.3, -0.6, 0.15], [-1.3, -0.3, 0.15]], **below)
     assert any("way to view 1 passes an obstacle whichever way" in e for e in errors)
@@ -746,6 +752,31 @@ def test_map_of_the_setup(tmp_path, capsys):
         main(["--setup", str(example), "--check", "--map", str(picture)])  # never overwrites
     with pytest.raises(SystemExit):
         main(["--setup", str(example), "--map", str(tmp_path / "other.png")])  # only with --check
+
+
+@pytest.mark.parametrize("loss", [0.0, 0.2])
+def test_the_whole_example_room(board_program, tmp_path, loss):
+    """Everything at once, against the board's own code: a person lying down whose head
+    is known, markers that face the views, furniture on the short way to view 1, the
+    camera height, and messages lost."""
+    example = json.loads((Path(__file__).parent.parent / "docs" / "room.example.json").read_text())
+    # Going round clockwise, the camera faces away from the person, so markers on the far
+    # walls, above the head and below the feet, keep it sure of where it is.
+    markers = {**example["markers"], "5": [0, -4.0, 90], "6": [0, 3.8, 270]}
+    room = {**example, "start": [1.5, -2.2, 90], "obstacles": [[1.3, -0.6, 0.15]], "markers": markers}
+    path = tmp_path / "room.json"
+    path.write_text(json.dumps(room))
+    setup = Setup.load(path)
+    assert check_setup(setup)[0] == []
+    for seed in range(4):
+        robot, nearest, _ = drive(
+            board_program, setup, seed, until=State.DONE, seconds=300, loss=loss, breathing=False, lies=90
+        )
+        states = [state for _, state, _ in robot.mission.log]
+        assert "going the long way round, past a known obstacle" in states
+        assert [view for _, state, view in robot.mission.log if state == "measuring"] == [0, 1]
+        assert robot.person_problem is None and robot.battery_problem is None
+        assert nearest > KEEP_OUT and robot.furniture > 0.25
 
 
 def test_check_command(tmp_path, capsys):

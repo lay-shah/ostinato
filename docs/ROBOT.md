@@ -75,7 +75,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `python -m ostinato.marker_range`, also `--blur 2 --light 0.3 --noise 10` | How far a drawn marker is read, sharp or blurred, lit or dim, and how far off |
 | `python -m ostinato.calibrate --print`, then `--square 25` | Measures the camera's lens with a printed board |
 | `python -m ostinato.bench --port …` | First power-on checks, wheels off the ground; `--measure` finds counts per meter |
-| `python -m ostinato.robot --setup room.json --check`, with `--map room.png` to draw it | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path, furniture in the way or hiding a marker |
+| `python -m ostinato.robot --setup room.json --check`, with `--map room.png` to draw it | Checks a setup file: start too near the person, a viewpoint with no marker in view or one turned away, a marker on the path, furniture in the way or hiding a marker, long stretches of the way with no marker in view |
 | `python -m ostinato.robot --setup room.json --rehearse 1` | No board needed: stand a webcam where view 1 is and compare what it sees, markers, the person, and which way they lie, with the setup file. 0 is the start |
 | `python -m ostinato.remote --make-key key.txt` | Makes the key shared by the remote and the rover |
 | `python -m ostinato.robot --setup room.json --port … --key key.txt` | Runs the rover. It starts stopped. Before leaving each view it asks the person aloud to raise a hand, unless `--no-prompt` |
@@ -87,13 +87,14 @@ The setup file holds a person's measurements: where the rover starts, where the 
 
 ## Knowing where it is
 
-It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. It looks for markers in every picture while it may move, and twice a second while stopped. Stopped, nothing changes but the noise, and the time is better spent measuring. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty is, which way they lie, and where the markers are: it does not find people by itself.
+It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. It looks for markers in every picture while it may move, and twice a second while stopped. The camera looks to the rover's left, so going round the person counter-clockwise it faces them, and going clockwise it faces the walls: put markers on the far walls too, or the check will note long stretches with none in view. Stopped, nothing changes but the noise, and the time is better spent measuring. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty is, which way they lie, and where the markers are: it does not find people by itself.
 
 ## Tested so far, in simulation only
 
 Simulated wheels, sightings, and boards are kinder than real ones.
 
 - Against the compiled board code, 300 of 300 drives reached the first viewpoint, including with 30% of messages lost or damaged, and none came nearer than 1.2 m. Hiding markers beyond 4 m changed nothing in 120 more drives.
+- Everything at once, in the example room with the person lying down, furniture on the short way to view 1, and markers on the far walls: 8 of 8 drives measured at both views, with and without 20% of messages lost, never nearer than 1.26 m to the person or 1.17 m to the furniture. This found two problems, now fixed: going round at 1.25 m, the guard's margin for uncertainty held the rover still near the feet, so it now goes round at 1.5 m and comes in to 1.25 m at each view; and the long way round needed more than the 90 s a leg was allowed.
 - With a box on the short way round to a viewpoint, it stopped for it, turned back, and reached the view the other way round, in 5 of 5 drives. It tries the other way once per view, then moves on.
 - With no marker in sight, it turned once and stopped. After a cut cable, an emergency stop, or a board restart, the wheels never turned again.
 - The person check caught every shift of 0.28 m or more, with no false alarms in 30 drives. Real pose estimates are rougher, so expect false stops.
