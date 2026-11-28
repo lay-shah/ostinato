@@ -19,7 +19,10 @@ map="data/room-map-$(date +%Y%m%d-%H%M%S).png"
 passed=$?
 open "$map" 2>/dev/null  # compare it with the room, problems marked, before going on
 if [ $passed -eq 0 ]; then
-  .venv/bin/python -m ostinato.robot --setup "$room" --rehearse all
+  record="${map%.png}.txt"
+  record="${record/room-map/rehearsal}"
+  .venv/bin/python -u -m ostinato.robot --setup "$room" --rehearse all | tee "$record"
+  echo "Saved what it saw to $record, and the map to $map."
 else
   echo "Fix the problems in the setup file, then run this again."
 fi
