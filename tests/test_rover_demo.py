@@ -17,7 +17,7 @@ def test_simulated_run_moves_to_a_second_view_and_measures():
         states.append((demo.mission.view, demo.mission.state))
         if demo.frame is not None:
             assert demo.drive == STOP  # never measures while moving
-        assert math.hypot(demo.base.pose.x, demo.base.pose.y) >= KEEP_OUT
+        assert demo.robot.setup.body.distance(demo.base.pose.x, demo.base.pose.y) >= KEEP_OUT
     assert (0, State.MEASURING) in states and demo.mission.view == 1
     assert demo.mission.assessor.decision.bpm == pytest.approx(BPM, abs=1)
     assert "simulated" in demo.status()[0]

@@ -111,14 +111,16 @@ def simulate(
     seconds=400,
     bearings=(0.5, 2.2, -2.0),
     shaking=lambda view, t: False,
+    body=None,
+    truth=None,
 ):
     """Run a mission and check the rules at every step."""
     rng = np.random.default_rng(seed)
     a, r = rng.uniform(-math.pi, math.pi), rng.uniform(1.6, 4)
-    base = SimulatedBase(
-        Pose(r * math.cos(a), r * math.sin(a), rng.uniform(-3, 3)), (0.0, 0.0), rng, obstacles
-    )
-    guard, mission, drive, t = Guard(), Mission((0.0, 0.0), list(bearings)), STOP, 0.0
+    lying = body or rover.Body((0.0, 0.0))
+    start = lying.around(a, r)
+    base = SimulatedBase(Pose(*start, rng.uniform(-3, 3)), lying, rng, obstacles)
+    guard, mission, drive, t = Guard(), Mission(body or (0.0, 0.0), list(bearings)), STOP, 0.0
     closest = math.inf
     while mission.state is not State.DONE and t < seconds:
         if cut is None or not cut[0] <= t <= cut[1]:
@@ -137,7 +139,8 @@ def simulate(
         before = base.pose
         base.step(drive, 0.05)
         assert math.dist((before.x, before.y), (base.pose.x, base.pose.y)) < 0.02
-        closest = min(closest, math.hypot(base.pose.x, base.pose.y))
+        # Measured to the person's real body, whatever the rover was told.
+        closest = min(closest, (truth or lying).distance(base.pose.x, base.pose.y))
         t += 0.05
     return mission, closest, t
 
@@ -220,3 +223,49 @@ def test_a_view_that_never_steadies_is_given_up():
     mission, _, _ = simulate(2063, shaking=lambda view, t: True, bearings=(0.5, 2.2))
     assert mission.state is State.DONE and "measuring" not in [s for _, s, _ in mission.log]
     assert "a person must check" in mission.outcome
+
+
+LYING = rover.Body((0.0, 0.0), math.pi / 2)  # head toward +y, feet toward -y
+
+
+def test_body_geometry():
+    assert LYING.ends[0] == pytest.approx((0, rover.HEAD)) and LYING.ends[1] == pytest.approx(
+        (0, -rover.FEET)
+    )
+    assert LYING.distance(1.0, 0.3) == pytest.approx(1.0) and LYING.distance(0, -2.1) == pytest.approx(1.0)
+    assert LYING.around(0.0, 1.25) == pytest.approx((1.25, 0.0))
+    assert LYING.around(-math.pi / 2, 1.25) == pytest.approx((0.0, -1.1 - 1.25))
+    for bearing in np.linspace(-3, 3, 25):
+        assert LYING.distance(*LYING.around(bearing, 1.25)) == pytest.approx(1.25, abs=1e-6)
+    point = rover.Body((1.0, 2.0))
+    assert point.distance(1.0, 4.0) == pytest.approx(2.0) and point.around(0.0, 1.25) == pytest.approx(
+        (2.25, 2.0)
+    )
+
+
+def test_path_around_a_lying_person_keeps_clear_of_head_and_feet():
+    for here in np.linspace(-3, 3, 13):
+        for to in np.linspace(-3, 3, 13):
+            start = LYING.around(here, 3.0)
+            points = [start, *rover.ring_path(Pose(*start, 0), LYING, to)]
+            for (x0, y0), (x1, y1) in itertools.pairwise(points):
+                near = min(
+                    LYING.distance(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k) for k in np.linspace(0, 1, 30)
+                )
+                assert near >= rover.RING - 0.02
+
+
+def test_knowing_the_head_keeps_it_1_m_from_the_feet():
+    # Views beside the chest; the rover must get round the feet to reach the second one.
+    views = (0.3, -2.8)
+    told, _, _ = simulate(2070, bearings=views, body=LYING)
+    assert told.outcome == "15.0 breaths/min"
+    for seed in range(2070, 2080):
+        _, closest, _ = simulate(seed, bearings=views, body=LYING, reading=lambda view, t: NONE)
+        assert closest >= KEEP_OUT
+    # Told only where the chest is, the same rover passes within 1 m of the feet.
+    worst = min(
+        simulate(seed, bearings=views, truth=LYING, reading=lambda view, t: NONE)[1]
+        for seed in range(2070, 2080)
+    )
+    assert worst < 0.5

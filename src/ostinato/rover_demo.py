@@ -20,7 +20,7 @@ from .demo import Demo
 from .localize import Sighting
 from .motors import seal
 from .robot import Robot, Setup
-from .rover import KEEP_OUT, RING, STOP, Drive, Pose, SimulatedBase, State, wrap
+from .rover import FEET, HEAD, KEEP_OUT, RING, STOP, Drive, Pose, SimulatedBase, State, wrap
 from .shake import Steadiness
 from .ui import AMBER, BG, BLUE, CARD, DIM, GREEN, INK, LINE, font
 
@@ -82,7 +82,9 @@ class RoverDemo:
         self.base = SimulatedBase(Pose(2.6, -0.6, 2.4), (0.0, 0.0), rng, slip=0.0)
         self.wheels, self.rng = Wheels(self.base, rng), rng
         # Where a person placed it, a few centimeters out.
-        setup = Setup(TRACK, TICKS, Pose(2.63, -0.57, 2.45), (0.0, 0.0), list(BEARINGS), dict(MARKERS))
+        setup = Setup(
+            TRACK, TICKS, Pose(2.63, -0.57, 2.45), (0.0, 0.0), list(BEARINGS), dict(MARKERS), head=math.pi / 2
+        )
         self.robot = Robot(setup, self.wheels, ask=True)
         self.asked_at = None  # the drawn person never raises a hand
         self.mission = self.robot.mission
@@ -225,17 +227,21 @@ class RoverDemo:
     def _at(self, x, y):
         return (MAP[0] + MAP[2]) / 2 + x * SCALE, (MAP[1] + MAP[3]) / 2 - y * SCALE
 
-    def _circle(self, d, radius, **style):
-        x, y = self._at(0, 0)
-        d.ellipse((x - radius * SCALE, y - radius * SCALE, x + radius * SCALE, y + radius * SCALE), **style)
+    def _around(self, d, clearance, **style):
+        """The line `clearance` from the person's body: round a point, longer round a body."""
+        body = self.robot.setup.body
+        points = [self._at(*body.around(a, clearance)) for a in np.linspace(-math.pi, math.pi, 73)]
+        d.line(points, joint="curve", **style)
 
     def _map(self, d):
         d.rounded_rectangle(MAP, 12, fill=CARD, outline=LINE)
-        self._circle(d, KEEP_OUT, outline=AMBER, width=2)
-        self._circle(d, RING, outline=LINE)
+        self._around(d, KEEP_OUT, fill=AMBER, width=2)
+        self._around(d, RING, fill=LINE, width=1)
+        # Drawn to the size the rover allows for: HEAD above the chest, FEET below.
         x, y = self._at(0, 0)
-        d.ellipse((x - 14, y - 44, x + 14, y - 18), fill=(186, 140, 104))
-        d.rounded_rectangle((x - 18, y - 20, x + 18, y + 48), 8, fill=(84, 138, 190))
+        top, bottom, r = y - HEAD * SCALE, y + FEET * SCALE, 0.12 * SCALE
+        d.rounded_rectangle((x - 0.2 * SCALE, top + 1.6 * r, x + 0.2 * SCALE, bottom), 8, fill=(84, 138, 190))
+        d.ellipse((x - r, top, x + r, top + 2 * r), fill=(186, 140, 104))
         d.text(
             ((MAP[0] + MAP[2]) / 2, MAP[3] - 10),
             "From above. Orange: 1 m keep-out, and where it thinks it is",
@@ -244,7 +250,7 @@ class RoverDemo:
             anchor="md",
         )
         for i, bearing in enumerate(BEARINGS):
-            vx, vy = self._at(RING * math.cos(bearing), RING * math.sin(bearing))
+            vx, vy = self._at(*self.robot.setup.body.around(bearing, RING))
             fill = BLUE if i == self.mission.view else DIM
             d.ellipse((vx - 11, vy - 11, vx + 11, vy + 11), outline=fill, width=2)
             d.text((vx, vy), str(i + 1), font=font(13), fill=fill, anchor="mm")

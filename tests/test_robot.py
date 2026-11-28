@@ -461,7 +461,8 @@ def test_setup_check(tmp_path):
 
     errors, warnings = check_setup(setup_with(tmp_path))
     assert errors == [] and all(
-        "only marker" in w or "without a facing" in w or "no battery_low" in w for w in warnings
+        "only marker" in w or "without a facing" in w or "no battery_low" in w or "no head direction" in w
+        for w in warnings
     )
     assert any("markers 1, 2, 3, 4 without a facing" in w for w in warnings)
     errors, _ = check_setup(setup_with(tmp_path, start=[0.8, 0, 0]))
@@ -507,6 +508,44 @@ def test_the_example_room_is_complete_and_passes(capsys):
     assert check_setup(setup) == ([], [])
     main(["--setup", str(path), "--check"])
     assert "No problems found." in capsys.readouterr().out
+
+
+def test_setup_knows_how_the_person_lies(tmp_path):
+    from ostinato.robot import check_setup
+
+    setup = setup_with(tmp_path, person=[0, 0, 90])
+    assert setup.person == (0.0, 0.0) and setup.head == pytest.approx(math.pi / 2)
+    errors, warnings = check_setup(setup)
+    assert errors == [] and not any("head direction" in w for w in warnings)
+    # Started 1.5 m beyond the feet: 0.4 m from them.
+    errors, _ = check_setup(setup_with(tmp_path, person=[0, 0, 90], start=[0, -1.5, 0]))
+    assert any("start is 0.40 m from the person" in e for e in errors)
+    # A view straight past the head or the feet sees the chest end on.
+    _, warnings = check_setup(setup_with(tmp_path, person=[0, 0, 90], views=[80, 30, -100]))
+    assert any("view 1 is beyond the head" in w for w in warnings)
+    assert any("view 3 is beyond the feet" in w for w in warnings)
+    for bad in ([0, 0, 90, 1], [0, 0, 1e400], [0]):
+        with pytest.raises(ValueError, match="setup file"):
+            setup_with(tmp_path, person=bad)
+
+
+def test_guard_hears_the_distance_to_the_feet(tmp_path):
+    from ostinato.localize import Localizer
+
+    class Ear:
+        def person(self, t, distance, approaching):
+            self.heard = distance, approaching
+
+    setup = setup_with(tmp_path, person=[0, 0, 90])
+    # 2.3 m from the chest, straight past the feet, facing them.
+    loc, ear = (
+        Localizer(Pose(0, -2.3, math.pi / 2), setup.markers, setup.track, sigma=(0.01, 0.01, 0.01)),
+        Ear(),
+    )
+    loc.tell(ear, 0.0, setup.body)
+    assert ear.heard[0] == pytest.approx(1.2 - 2 * 0.01, abs=0.01) and ear.heard[1]
+    loc.tell(ear, 0.0, setup.person)  # as before, the chest alone
+    assert ear.heard[0] == pytest.approx(2.3 - 2 * 0.01, abs=0.01)
 
 
 def test_check_command(tmp_path, capsys):
