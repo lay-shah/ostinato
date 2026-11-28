@@ -719,6 +719,38 @@ def test_rehearsal_compares_the_picture_with_the_file(tmp_path):
     assert view_pose(setup, 0) == setup.start
 
 
+def test_rehearsal_places_the_camera_from_the_markers():
+    from ostinato.localize import Sighting
+    from ostinato.robot import fix_from_markers, rehearsal, view_pose
+
+    setup = Setup.load(Path(__file__).parent.parent / "docs" / "room.example.json")
+    expected = view_pose(setup, 1)
+
+    def seen_from(pose, numbers=(1, 2)):
+        out = []
+        for n in numbers:
+            mx, my = setup.markers[n]
+            bearing = wrap(math.atan2(my - pose.y, mx - pose.x) - pose.heading)
+            out.append(Sighting(n, math.dist((pose.x, pose.y), (mx, my)), bearing))
+        return out
+
+    # Where it should be: found exactly.
+    fix = fix_from_markers(setup, expected, seen_from(expected))
+    assert math.dist((fix.x, fix.y), (expected.x, expected.y)) < 1e-4
+    # Stood 0.3 m off and turned 5 degrees: found, and said.
+    really = Pose(expected.x + 0.3, expected.y, expected.heading + math.radians(5))
+    fix = fix_from_markers(setup, expected, seen_from(really))
+    assert math.dist((fix.x, fix.y), (really.x, really.y)) < 1e-4
+    line = next(x for x in rehearsal(setup, expected, seen_from(really)) if x.startswith("position"))
+    assert "0.30 m and +5 degrees" in line and "check where the camera stands" in line
+    ok = next(x for x in rehearsal(setup, expected, seen_from(expected)) if x.startswith("position"))
+    assert "0.00 m and +0 degrees" in ok and "check" not in ok
+    # One marker cannot place it.
+    assert fix_from_markers(setup, expected, seen_from(expected, (1,))) is None
+    lines = rehearsal(setup, expected, seen_from(expected, (1,)))
+    assert any(x.startswith("position: two markers are needed") for x in lines)
+
+
 def test_rehearse_command(monkeypatch, capsys, tmp_path):
     import cv2
 
