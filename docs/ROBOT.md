@@ -7,14 +7,15 @@ A new rover that drives to one person, **stops**, and measures from a camera on 
 | Step | Done when | Tool | Cost |
 |---|---|---|---|
 | 1. Camera position | Counted-breath trials on people lying down, at several heights and distances, show where a rate is given and how far off it is | `python -m ostinato.trial` | $0 |
-| 2. Computer | The speed test's rover line gives 10 frames/s or more, with a photo of a person | `python -m ostinato.speed --image photo.jpg` | borrow first |
-| 3. Chassis | Wheels far enough apart not to tip, with the real part weights | `python -m ostinato.tipping --part …` | $90-200 |
-| 4. Mast | The camera is steady within 2 s of every push | `python -m ostinato.shake` | $30-50 |
-| 5. Wiring | Every check passes with the wheels off the ground | [WIRING.md](WIRING.md), `python -m ostinato.bench` | $140-220 |
-| 6. Driven by hand | Stops 1 m away, measures, moves to a second view, with the remote | `python -m ostinato.remote` | $0 |
-| 7. Autonomy | Goes between marked viewpoints by itself and stops for obstacles | `python -m ostinato.robot` | $0-50 |
+| 2. Room | The setup check passes, its map matches the room, and a webcam standing at each view sees the markers within about 5% and the person within 0.25 m | `python -m ostinato.robot --check --map`, then `--rehearse` | $0 |
+| 3. Computer | The speed test's rover line gives 10 frames/s or more, with a photo of a person | `python -m ostinato.speed --image photo.jpg` | borrow first |
+| 4. Chassis | Wheels far enough apart not to tip, with the real part weights | `python -m ostinato.tipping --part …` | $90-200 |
+| 5. Mast | The camera is steady within 2 s of every push | `python -m ostinato.shake` | $30-50 |
+| 6. Wiring | Every check passes with the wheels off the ground | [WIRING.md](WIRING.md), `python -m ostinato.bench` | $140-220 |
+| 7. Driven by hand | Stops 1 m away, measures, moves to a second view, with the remote | `python -m ostinato.remote` | $0 |
+| 8. Autonomy | Goes between marked viewpoints by itself and stops for obstacles | `python -m ostinato.robot` | $0-50 |
 
-Do not buy the rover before step 1 works.
+Do not buy the rover before steps 1 and 2 work. Neither needs more than a laptop and a webcam.
 
 ## Where to put the camera
 
@@ -82,11 +83,11 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `… --log data/run.jsonl`, then `--replay data/run.jsonl` | Saves and summarizes a run, without pictures |
 | `python -m ostinato.rover_demo` | The whole thing on a drawn person and room; also `launch/Rover Simulation.command` |
 
-The setup file holds a person's measurements: where the rover starts, where the person and markers are, the viewpoints, and the camera. Start from [room.example.json](room.example.json), which passes the check, and replace every number with one measured in the room. The format is explained at the top of `src/ostinato/robot.py`. Run logs hold the breathing result, so keep them in `data/`, which is never committed. Without `--key`, the rover takes G and Space from its own window, which is only for testing on a stand.
+The setup file holds a person's measurements: where the rover starts, where the person is and which way they lie, the markers and which way they face, known furniture, the viewpoints, the camera, and the battery's low voltage. Start from [room.example.json](room.example.json), which passes the check, and replace every number with one measured in the room. The format is explained at the top of `src/ostinato/robot.py`. Run logs hold the breathing result, so keep them in `data/`, which is never committed. Without `--key`, the rover takes G and Space from its own window, which is only for testing on a stand.
 
 ## Knowing where it is
 
-It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. It looks for markers in every picture while it may move, and twice a second while stopped. Stopped, nothing changes but the noise, and the time is better spent measuring. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty and the markers are: it does not find people by itself.
+It combines the wheel encoders with the printed markers, which the measuring camera also sees, and keeps track of how sure it is. It looks for markers in every picture while it may move, and twice a second while stopped. Stopped, nothing changes but the noise, and the time is better spent measuring. Turn each marker to face the viewpoints that use it, and put the direction it faces in the setup file as `[x, y, facing]`: turned 50 degrees or more away, a blurred camera reads it reliably only to about 3 m. With facings, the setup check counts a marker turned more than 45 degrees from a view only within 3 m, and one turned more than 65 degrees not at all. A person still has to place it at the start and measure where the casualty is, which way they lie, and where the markers are: it does not find people by itself.
 
 ## Tested so far, in simulation only
 
@@ -108,4 +109,4 @@ Simulated wheels, sightings, and boards are kinder than real ones.
 - Whether blankets, thick clothing, or injuries hide chest motion
 - Frame rate on the robot's computer. On an Apple M4 laptop, finding markers nearly doubles the time for each picture, so a computer that runs the desktop app well may still be too slow for the rover
 - How long the mast shakes after stopping
-- How well markers are read, and the person is found, by a real camera in a real room
+- How well markers are read, and the person is found, by a real camera in a real room. `--rehearse` answers this with a laptop, before anything is built
