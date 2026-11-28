@@ -83,7 +83,7 @@ Each layer stops the wheels on its own, so one failing does not move the rover.
 | `… --log data/run.jsonl`, then `--replay data/run.jsonl` | Saves and summarizes a run, without pictures |
 | `python -m ostinato.rover_demo` | The whole thing on a drawn person and room; also `launch/Rover Simulation.command` |
 
-The setup file holds a person's measurements: where the rover starts, where the person is and which way they lie, the markers and which way they face, known furniture, the viewpoints, the camera, and the battery's low voltage. Start from [room.example.json](room.example.json), which passes the check, and replace every number with one measured in the room. The format is explained at the top of `src/ostinato/setup_file.py`. Run logs hold the breathing result, so keep them in `data/`, which is never committed. Without `--key`, the rover takes G and Space from its own window, which is only for testing on a stand.
+The setup file holds a person's measurements: where the rover starts, where the person is and which way they lie, the markers and which way they face, known furniture, the viewpoints, the camera, and the battery's low voltage. Start from [room.example.json](room.example.json), which passes the check, and replace every number with one measured in the room, as [MEASURING.md](MEASURING.md) explains. The format is explained at the top of `src/ostinato/setup_file.py`. Run logs hold the breathing result, so keep them in `data/`, which is never committed. Without `--key`, the rover takes G and Space from its own window, which is only for testing on a stand.
 
 ## Knowing where it is
 

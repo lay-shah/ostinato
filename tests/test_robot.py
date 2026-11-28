@@ -1037,3 +1037,15 @@ def test_a_raised_hand_ends_it_where_it_is(board_program, setup):
 def test_without_asking_it_never_asks(board_program, setup):
     robot, _, _ = drive(board_program, setup, 2, until=State.DONE, seconds=200, breathing=False)
     assert robot.asks == [] and robot.mission.view == 1
+
+
+def test_the_measuring_guide_matches_the_example_room():
+    docs = Path(__file__).parent.parent / "docs"
+    guide = (docs / "MEASURING.md").read_text()
+    setup = Setup.load(docs / "room.example.json")
+    # "A marker on the wall at -x facing back into the room faces 0"
+    assert setup.markers[2][0] < 0 and setup.facings[2] == 0 and "faces 0" in guide
+    # "Facing the person from the +x side: 180"
+    assert setup.start.x > 0 and setup.start.heading == pytest.approx(math.pi) and "+x side: 180" in guide
+    # "Lying along +y with the head that way: 90"
+    assert setup.head == pytest.approx(math.pi / 2) and "head that way: 90" in guide
