@@ -771,7 +771,8 @@ def test_run_log(program, tmp_path, capsys):
     assert all(isinstance(r["markers"], list) for r in rows)
     rates = [r["fps"] for r in rows if r["fps"]]
     assert rates and all(5 < rate < 40 for rate in rates)  # pictures 0.03 s apart, plus the work
-    capsys.readouterr()
+    ended = capsys.readouterr().out
+    assert "Outcome:" in ended and "Nearest to the person" in ended and "Run --replay on it" in ended
     main(["--setup", str(tmp_path / "room.json"), "--replay", str(log)])
     out = capsys.readouterr().out
     assert "driven" in out and "Nearest to the person" in out and "Ended driving" in out

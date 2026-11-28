@@ -842,6 +842,12 @@ def main(argv=None):
             log.close()
         cv2.destroyAllWindows()
     print(f"Outcome: {robot.mission.outcome}")
+    if args.log:
+        try:
+            print("\n" + summarize(args.log, setup, json.loads(args.setup.read_text())))
+            print(f"Saved {args.log}. Run --replay on it to see this again.")
+        except (OSError, ValueError) as error:  # a run too short to log is not a failure
+            print(f"No summary: {error}")
 
 
 if __name__ == "__main__":
