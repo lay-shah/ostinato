@@ -485,10 +485,15 @@ def test_setup_check(tmp_path):
 
     errors, warnings = check_setup(setup_with(tmp_path))
     assert errors == [] and all(
-        "only marker" in w or "without a facing" in w or "no battery_low" in w or "no head direction" in w
+        "only marker" in w
+        or "without a facing" in w
+        or "no battery_low" in w
+        or "no head direction" in w
+        or "no camera height" in w
         for w in warnings
     )
     assert any("markers 1, 2, 3, 4 without a facing" in w for w in warnings)
+    assert any("no camera height" in w for w in warnings)  # the test room gives none
     errors, _ = check_setup(setup_with(tmp_path, start=[0.8, 0, 0]))
     assert any("start is 0.80 m" in e for e in errors)
     errors, _ = check_setup(setup_with(tmp_path, markers={"1": [5, 0]}))
