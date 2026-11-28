@@ -687,6 +687,11 @@ def test_rehearsal_compares_the_picture_with_the_file(tmp_path):
         any(line.startswith("marker 1: not seen, expected at") for line in lines)
         and "person: not seen" in lines
     )
+    turned = Setup(**{**setup.__dict__, "facings": {**setup.facings, 1: setup.facings[1] + math.pi}})
+    assert any(
+        line.startswith("marker 1: not seen, too far, or turned too far away")
+        for line in rehearsal(turned, pose, [])
+    )
     sofa = Setup(**{**setup.__dict__, "obstacles": [(-1.6, -0.33, 0.7)]})
     hidden = rehearsal(sofa, pose, [])
     assert any(line.startswith("marker 1: not seen, hidden behind furniture") for line in hidden)

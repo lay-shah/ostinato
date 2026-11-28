@@ -187,6 +187,19 @@ def longest_blind(points, visible, pan, step=0.1, center=None):
     return longest
 
 
+def marker_reach(setup, n, x, y):
+    """How far marker n can be from a camera at (x, y) and still be read: less when it
+    is turned away, and not at all when it is turned too far."""
+    sees = setup.camera.matrix[0, 0] * MARKER / MIN_PIXELS
+    if n not in setup.facings:
+        return sees
+    mx, my = setup.markers[n]
+    turn = abs(wrap(math.atan2(y - my, x - mx) - setup.facings[n]))
+    if turn > TURNED_AWAY:
+        return 0.0
+    return min(sees, TURNED_RANGE) if turn > TURNED else sees
+
+
 def check_setup(setup):
     """Problems with a setup file, before driving. Returns (errors, warnings)."""
     errors, warnings = [], []
@@ -196,17 +209,9 @@ def check_setup(setup):
     if gap < RING:
         errors.append(f"the start is {gap:.2f} m from the person; it must be at least {RING} m away")
     half = math.radians(setup.camera.fov) / 2 * 0.9  # markers at the very edge are often missed
-    sees = setup.camera.matrix[0, 0] * MARKER / MIN_PIXELS
 
     def reach(n, x, y):
-        """How far marker n can be from (x, y) and still be read."""
-        if n not in setup.facings:
-            return sees
-        mx, my = setup.markers[n]
-        turn = abs(wrap(math.atan2(y - my, x - mx) - setup.facings[n]))
-        if turn > TURNED_AWAY:
-            return 0.0
-        return min(sees, TURNED_RANGE) if turn > TURNED else sees
+        return marker_reach(setup, n, x, y)
 
     def visible(x, y, facing):
         """Markers the camera reads from (x, y), looking toward `facing`."""
@@ -529,7 +534,14 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
             )
         elif abs(across) < math.degrees(half):
             hidden = clearance([(pose.x, pose.y), (mx, my)], setup.obstacles) <= 0
-            why = "hidden behind furniture in the setup file" if hidden else f"expected at {expected}"
+            far = distance >= marker_reach(setup, n, pose.x, pose.y)
+            why = (
+                "hidden behind furniture in the setup file"
+                if hidden
+                else f"too far, or turned too far away, to be read from here ({expected})"
+                if far
+                else f"expected at {expected}"
+            )
             lines.append(f"marker {n}: not seen, {why}")
     for n in sorted(set(seen) - set(setup.markers)):
         lines.append(f"marker {n}: seen, but not in the setup file")
