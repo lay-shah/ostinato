@@ -17,13 +17,14 @@ from pathlib import Path
 
 import numpy as np
 
-from .localize import Localizer, find_markers, ground, place
+from .localize import GOOD, Localizer, find_markers, ground, place
 from .motors import Board
 from .rover import (
     STOP,
     Drive,
     Guard,
     Mission,
+    Pose,
     State,
     clearance,
     wrap,
@@ -265,6 +266,32 @@ class Robot:
         return "; ".join(parts)
 
 
+def fix_from_markers(setup, guess, sightings):
+    """Where the camera must be, from two or more marker sightings, as a Pose: the best fit
+    near `guess`. None with fewer than two, or if it does not settle."""
+    known = [s for s in sightings if s.marker in setup.markers]
+    if len(known) < 2:
+        return None
+    x = np.array([guess.x, guess.y, guess.heading], float)
+
+    def residuals(v):
+        out = []
+        for s in known:
+            mx, my = setup.markers[s.marker]
+            out.append(s.distance - math.dist((v[0], v[1]), (mx, my)))
+            out.append(wrap(s.bearing - (math.atan2(my - v[1], mx - v[0]) - v[2])))
+        return np.array(out)
+
+    for _ in range(20):
+        r = residuals(x)
+        jacobian = np.column_stack([(residuals(x + d) - r) / 1e-6 for d in np.eye(3) * 1e-6])
+        step, *_ = np.linalg.lstsq(jacobian, -r, rcond=None)
+        x += step
+        if np.abs(step).max() < 1e-6:
+            return Pose(float(x[0]), float(x[1]), wrap(float(x[2])))
+    return None
+
+
 def rehearsal(setup, pose, sightings, chest=None, axis=None):
     """Lines comparing what the camera sees, standing at `pose`, with the setup file."""
     cam = setup.camera
@@ -296,6 +323,19 @@ def rehearsal(setup, pose, sightings, chest=None, axis=None):
             lines.append(f"marker {n}: not seen, {why}")
     for n in sorted(set(seen) - set(setup.markers)):
         lines.append(f"marker {n}: seen, but not in the setup file")
+    fix = fix_from_markers(setup, pose, sightings)
+    if fix is None:
+        lines.append("position: two markers are needed to place the camera")
+    else:
+        off = math.dist((fix.x, fix.y), (pose.x, pose.y))
+        turn = math.degrees(wrap(fix.heading - pose.heading))
+        verdict = (
+            "" if off <= GOOD else "; check where the camera stands, and the markers' places in the file"
+        )
+        lines.append(
+            f"position: the markers put the camera {off:.2f} m and {round(turn):+d} degrees from "
+            f"where the file says it stands{verdict}"
+        )
     if setup.lens_height is None:
         lines.append("person: give the camera height in the setup file to check where they are")
     elif chest is None:
